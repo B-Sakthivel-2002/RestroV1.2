@@ -1,0 +1,10 @@
+# Local-only files at the project root
+/BuildFiles/
+/prompt.txt
+/issue list.xlsx
+
+# Visual Studio / .NET build output (API/.gitignore and UI/.gitignore cover the rest)
+.vs/
+bin/
+obj/
+*.user

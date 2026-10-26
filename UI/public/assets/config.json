@@ -1,0 +1,9 @@
+{
+  "apiUrl": "http://localhost:5001/api/",
+  "signalrUrl": "http:localhost:5001/kotHub",
+  "appName": "Restaurant POS",
+  "appDescription": "A Point of Sale system for restaurants.",
+  "appLogo": "assets/logo.png",
+  "version": "1.0.0",
+  "taxInclusive": true
+}
