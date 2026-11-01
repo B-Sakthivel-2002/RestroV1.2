@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS categories (
     CONSTRAINT categories_pkey PRIMARY KEY (categoryid)
 );
 
+-- Express Stall: only categories with this flag on are listed on the stall order screen.
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS expressstall boolean NOT NULL DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS item (
     itemid       serial,
     categoryid   integer NOT NULL,
@@ -243,10 +246,12 @@ CREATE TABLE IF NOT EXISTS "Table" (
 );
 
 -- Seating columns, added for databases created before table states existed.
--- tablestate: Available | Occupied | Reserved | Cleaning | Blocked
+-- tablestate: Available | Occupied | Reserved | Blocked
 -- (a table with open orders is always shown as Occupied, whatever is stored here).
 ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS capacity   integer     NOT NULL DEFAULT 4;
 ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS tablestate varchar(20) NOT NULL DEFAULT 'Available';
+-- The Cleaning state was removed: tables left in it are free.
+UPDATE "Table" SET tablestate = 'Available' WHERE tablestate = 'Cleaning';
 ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS statesince timestamp without time zone;
 
 -- Table merge: a table joined to another one points at it; its orders are billed on that table.

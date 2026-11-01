@@ -69,13 +69,28 @@ public class TablesController : ControllerBase
             OrderTotalAmount = _context.Orders.Where(o => o.Tableid == t.Tableid && (o.Status == "submitted" || o.Status == "printed")).Sum(o => o.Totalprice) ?? 0m,
             // Open orders first: an order moved in from another table may be older than the table's last settled order.
             OrderStatus = _context.Orders.Where(o => o.Tableid == t.Tableid).OrderByDescending(o => o.Status == "submitted" || o.Status == "printed").ThenByDescending(o => o.Timedate).Select(o => o.Status).FirstOrDefault(),
-            PrintStatus = _context.Orders.Where(o => o.Tableid == t.Tableid).OrderByDescending(o => o.Status == "submitted" || o.Status == "printed").ThenByDescending(o => o.Timedate).Select(o => o.PrintedF).FirstOrDefault()
+            PrintStatus = _context.Orders.Where(o => o.Tableid == t.Tableid).OrderByDescending(o => o.Status == "submitted" || o.Status == "printed").ThenByDescending(o => o.Timedate).Select(o => o.PrintedF).FirstOrDefault(),
+            StoredState = t.Tablestate,
+            OpenOrders = _context.Orders.Count(o => o.Tableid == t.Tableid && (o.Status == "submitted" || o.Status == "printed")),
+            HeldToken = _context.WaitlistTokens.Where(w => w.Tableid == t.Tableid && w.Status == TokenStatus.Called).Select(w => w.Tokencode).FirstOrDefault(),
+            SeatedToken = _context.WaitlistTokens
+                .Where(w => w.Tableid == t.Tableid && w.Status == TokenStatus.Seated && t.Tablestate == TableStates.Occupied)
+                .OrderByDescending(w => w.Seatedat).Select(w => w.Tokencode).FirstOrDefault()
         }).ToListAsync();
 
         if (list == null || !list.Any())
             return Ok(new { status = "Error", message = "No tables found", data = (object)null });
 
-        return Ok(new { status = "Success", message = "Tables fetched successfully", data = list });
+        // Tablestate / Tokencode: the same state and token the Waitlist & Tables board shows.
+        var data = list.Select(t => new
+        {
+            t.Tableid, t.Floorid, t.Tablename, t.Description, t.Status, t.Capacity, t.Mergedinto, t.Mergedintoname,
+            t.OrderTotalAmount, t.OrderStatus, t.PrintStatus,
+            Tablestate = t.OpenOrders > 0 ? TableStates.Occupied : t.HeldToken != null ? TableStates.Reserved : t.StoredState,
+            Tokencode = t.HeldToken ?? t.SeatedToken
+        }).ToList();
+
+        return Ok(new { status = "Success", message = "Tables fetched successfully", data });
     }
 
     [HttpGet("{id}")]
@@ -205,7 +220,7 @@ public class TablesController : ControllerBase
     }
 
     private static readonly string[] BoardStates =
-        { TableStates.Available, TableStates.Occupied, TableStates.Reserved, TableStates.Cleaning, TableStates.Blocked };
+        { TableStates.Available, TableStates.Occupied, TableStates.Reserved, TableStates.Blocked };
 
     public class TableStateRequest
     {
@@ -213,7 +228,7 @@ public class TablesController : ControllerBase
         public string? Notes { get; set; }
     }
 
-    // Captain sets a table Available (ready), Cleaning, Blocked or Reserved.
+    // Captain sets a table Available, Blocked or Reserved.
     [HttpPost("{id}/State")]
     public async Task<IActionResult> SetState(int id, [FromBody] TableStateRequest request)
     {
@@ -261,7 +276,7 @@ public class TablesController : ControllerBase
     private static readonly string[] OpenOrderStatuses = { "submitted", "printed" };
 
     // Moves a table's open orders (all, or the chosen ones) to a free table. When everything moves,
-    // the seated party goes with it and the old table goes to Cleaning.
+    // the seated party goes with it and the old table becomes Available.
     [HttpPost("Transfer")]
     public async Task<IActionResult> Transfer([FromBody] TransferRequest request)
     {
@@ -313,9 +328,11 @@ public class TablesController : ControllerBase
             foreach (var child in await _context.Tables.Where(t => t.Mergedinto == from.Tableid).ToListAsync())
                 child.Mergedinto = to.Tableid;
 
-            _seating.SetState(from, TableStates.Cleaning, tenant.UserId, notes: $"Guests moved to {to.Tablename}");
+            _seating.SetState(from, TableStates.Available, tenant.UserId, notes: $"Guests moved to {to.Tablename}");
         }
         await _context.SaveChangesAsync();
+        if (everything)
+            await _seating.AutoAssignAsync(from.Branchid!.Value, tenant.UserId);
         await _seating.NotifyAsync(from.Branchid);
 
         return Ok(new
@@ -404,7 +421,7 @@ public class TablesController : ControllerBase
         int? targetId = table.Mergedinto;
         string? targetName = await _context.Tables.Where(t => t.Tableid == targetId).Select(t => t.Tablename).FirstOrDefaultAsync();
         table.Mergedinto = null;
-        _seating.SetState(table, TableStates.Cleaning, tenant.UserId, TableEvents.Unmerged, notes: $"Separated from {targetName}");
+        _seating.SetState(table, TableStates.Available, tenant.UserId, TableEvents.Unmerged, notes: $"Separated from {targetName}");
         _seating.AddHistory(targetId!.Value, table.Branchid, table.Outletid, TableEvents.Unmerged, tenant.UserId,
             relatedTableId: table.Tableid, notes: $"{table.Tablename} separated");
         await _context.SaveChangesAsync();

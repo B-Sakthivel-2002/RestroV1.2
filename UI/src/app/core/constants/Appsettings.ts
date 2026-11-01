@@ -12,6 +12,13 @@ export class AppSettings {
     static taxInclusive = true;
 }
 
+// Express Stall is not a built-in order type: an outlet that runs a stall adds an active order type
+// with this name in the Orders Type master, and the menu entry and stall order screen appear.
+export const EXPRESS_STALL_NAME = 'express stall';
+export function isExpressStallType(ot: any): boolean {
+  return !!ot && ot.status !== false && (ot.ordertypename || '').trim().toLowerCase() === EXPRESS_STALL_NAME;
+}
+
 // export const isLoading =false;
 
 export const menuList ={
@@ -35,23 +42,6 @@ export const menuList ={
       url: "/order/0/0/3",
       icon: "pi pi-shop icon",
       submenu: []
-    },
-    {
-      name: "Waitlist",
-      url: "/waitlist",
-      icon: "pi pi-users icon",
-      submenu: [
-        {
-          name: "Waitlist & Tables",
-          url: "/waitlist",
-          icon: ""
-        },
-        {
-          name: "Token Booking",
-          url: "/token-booking",
-          icon: ""
-        }
-      ]
     },
         {
       name: "Report",
@@ -98,6 +88,16 @@ export const menuList ={
       url: "/master",
       icon: "pi pi-cog  icon",
       submenu: [
+        {
+          name: "Waitlist & Tables",
+          url: "/waitlist",
+          icon: ""
+        },
+        {
+          name: "Token Booking",
+          url: "/token-booking",
+          icon: ""
+        },
         {
           name: "Branch",
           url: "/branch",
@@ -314,23 +314,6 @@ export const captainMenuList ={
       icon: "pi pi-shop icon",
       submenu: []
     },
-    {
-      name: "Waitlist",
-      url: "/waitlist",
-      icon: "pi pi-users icon",
-      submenu: [
-        {
-          name: "Waitlist & Tables",
-          url: "/waitlist",
-          icon: ""
-        },
-        {
-          name: "Token Booking",
-          url: "/token-booking",
-          icon: ""
-        }
-      ]
-    },
         {
       name: "Report",
       url: "/dashboard",
@@ -341,7 +324,17 @@ export const captainMenuList ={
       name: "Master",
       url: "/master",
       icon: "pi pi-cog  icon",
-      submenu: [        
+      submenu: [
+        {
+          name: "Waitlist & Tables",
+          url: "/waitlist",
+          icon: ""
+        },
+        {
+          name: "Token Booking",
+          url: "/token-booking",
+          icon: ""
+        },        
         
         {
           name: "Customers",

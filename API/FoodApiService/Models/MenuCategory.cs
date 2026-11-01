@@ -13,6 +13,9 @@ public class MenuCategory
     [JsonPropertyName("flag")]
     public bool Flag { get; set; }
 
+    [JsonPropertyName("expressstall")]
+    public bool ExpressStall { get; set; }
+
     [JsonPropertyName("orderdetail")]
     public List<OrderDetail> OrderDetail { get; set; }
 

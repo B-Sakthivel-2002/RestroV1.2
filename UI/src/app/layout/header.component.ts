@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { QueryService } from '@appservices/query.service';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '@appservices/auth.service';
-import { AppSettings } from '../core/constants/Appsettings';
+import { AppSettings, isExpressStallType } from '../core/constants/Appsettings';
 
 @Component({
   selector: 'app-header',
@@ -15,7 +15,13 @@ import { AppSettings } from '../core/constants/Appsettings';
         <div class="container-fluid">
 
           <div class="custom-brand">
-            <a class="navbar-brand" routerLink="/dashboard"><span class="brand-mark"><i class="pi pi-shop"></i></span>{{appName}}</a>
+            <a class="navbar-brand" routerLink="/dashboard">
+              <span class="brand-mark"><i class="pi pi-shop"></i></span>
+              <span class="brand-text">
+                <span class="brand-title">{{branchName || appName}}</span>
+                @if (branchName) { <span class="brand-sub">{{appName}}</span> }
+              </span>
+            </a>
           </div>
 
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navSupportLogoId" aria-controls="navSupportLogoId" aria-expanded="false" aria-label="Toggle navigation">
@@ -23,9 +29,6 @@ import { AppSettings } from '../core/constants/Appsettings';
           </button>
 
           <div class="collapse navbar-collapse justify-content-end" id="navSupportLogoId">
-            @if (branchName) {
-              <span class="hdr-branch" title="Current branch"><i class="pi pi-building"></i>{{branchName}}</span>
-            }
             <ul class="navbar-nav">
 
               @for(list of menuList; track list.name) {
@@ -37,7 +40,7 @@ import { AppSettings } from '../core/constants/Appsettings';
                       <i [class]="list.icon"></i>
                     </a>
 
-                    <ul class="dropdown-menu dropdown-menu-end">
+                    <ul class="dropdown-menu dropdown-menu-end" [class.menu-cols]="list.submenu.length > 10">
                       @for(sublist of list.submenu; track sublist.name) {
                         @if(sublist.name == 'Logout') {
                           <li>
@@ -103,11 +106,30 @@ export class HeaderComponent implements OnInit {
 
         if (res.status == 'success') {
           this.menuList = res.menu;
+          this.addExpressStallMenu();
         }
 
         
       },
       error: (res: any) => {}
+    });
+  }
+
+  // Shown next to Take away only when the outlet has an active "Express Stall" order type.
+  addExpressStallMenu() {
+    const takeAway = this.menuList.findIndex((m: any) => m.name === 'Take away');
+    if (takeAway < 0) return;
+    this.queryService.getOrderTypes().subscribe({
+      next: (res: any) => {
+        const stall = (res.data || []).find((ot: any) => isExpressStallType(ot));
+        if (!stall || this.menuList.some((m: any) => m.name === 'Express Stall')) return;
+        this.menuList = [
+          ...this.menuList.slice(0, takeAway + 1),
+          { name: 'Express Stall', url: '/order/0/0/' + stall.ordertypeid, icon: 'pi pi-bolt icon', submenu: [] },
+          ...this.menuList.slice(takeAway + 1)
+        ];
+      },
+      error: () => {}
     });
   }
 

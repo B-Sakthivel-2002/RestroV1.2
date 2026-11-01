@@ -68,6 +68,13 @@ public class OrdersController : ControllerBase
             DateTime businesdate = DateHelper.GetBusinessDate(DateTime.Now);
             string ordernumber = await _numbers.NextAsync(DocumentNumberService.Order, branchid, businesdate);
 
+            // Item names in one query (was one blocking query per item).
+            var detailItemIds = orderDto.OrderDetail.Select(d => d.ItemID).Distinct().ToList();
+            var itemNames = await _context.Items.AsNoTracking()
+                .Where(i => detailItemIds.Contains(i.Itemid))
+                .Select(i => new { i.Itemid, i.Itemname })
+                .ToDictionaryAsync(i => i.Itemid, i => i.Itemname);
+
             var order = new Order
             {
                 Waiterid = orderDto.WaiterID,
@@ -94,7 +101,7 @@ public class OrdersController : ControllerBase
                     Sumofprice = d.SumOfPrice,
                     Branchid = branchid,
                     Outletid = tenant.OutletId,
-                    Name = _context.Items.Where(i => i.Itemid == d.ItemID).Select(i => i.Itemname).FirstOrDefault()
+                    Name = itemNames.GetValueOrDefault(d.ItemID)
                 }).ToList()
             };
 
@@ -171,7 +178,7 @@ public class OrdersController : ControllerBase
 
 
             // One KOT per kitchen, each on that kitchen's printer.
-            var printResults = _kotPrint.PrintOrder(order.Orderid);
+            var printResults = await _kotPrint.PrintOrderAsync(order.Orderid);
             var failedPrints = printResults.Where(r => !r.Ok).ToList();
             bool printFailed = failedPrints.Count > 0;
             string printError = KotPrintService.Describe(failedPrints);
@@ -328,6 +335,7 @@ public class OrdersController : ControllerBase
             {
                 o.Orderid, o.Waiterid, o.Ordernumber, o.Tableid, o.Timedate,
                 o.Customerid, o.Bookingid, o.Totalprice, o.Billingid, o.Ordertypeid, o.Status, o.Businessdate, o.Guestlabel,
+                Customername = _context.Customers.Where(c => c.Customerid == o.Customerid).Select(c => c.Name).FirstOrDefault(),
                 Orderdetail = o.Orderdetails.Select(od => new
                 {
                     od.Orderdetailid, od.Orderid, od.Itemid,
@@ -431,7 +439,7 @@ public class OrdersController : ControllerBase
         if (!await _context.Orders.ForBranch(tenant).AnyAsync(o => o.Orderid == id))
             return NotFound(new { status = "Error", message = "Order not found" });
 
-        var results = _kotPrint.PrintOrder(id, kitchenId);
+        var results = await _kotPrint.PrintOrderAsync(id, kitchenId);
         if (results.Count == 0)
             return BadRequest(new { status = "Error", message = "Nothing to print for this kitchen" });
 
@@ -703,6 +711,9 @@ public class OrdersController : ControllerBase
         // Guest the items go to; empty = the first guest.
         public string? GuestLabel { get; set; }
 
+        // Customer (from the customer master) the items go to; the customer's name becomes the guest tab.
+        public int? CustomerId { get; set; }
+
         public List<SplitItem> Items { get; set; } = new();
     }
 
@@ -721,11 +732,25 @@ public class OrdersController : ControllerBase
                 Guestlabel = g.Key,
                 Orders = g.Count(),
                 Total = g.Sum(o => o.Totalprice) ?? 0m,
-                Printed = g.Any(o => o.Status == "printed")
+                Printed = g.Any(o => o.Status == "printed"),
+                Customerid = g.Max(o => o.Customerid)
             })
             .ToListAsync();
 
-        var ordered = guests.OrderBy(g => g.Guestlabel != null).ThenBy(g => g.Guestlabel).ToList();
+        // Customer chosen on the order screen, shown when the guest has no name yet.
+        var customerIds = guests.Where(g => g.Customerid > 0).Select(g => g.Customerid!.Value).Distinct().ToList();
+        var customerNames = await _context.Customers.AsNoTracking()
+            .Where(c => customerIds.Contains(c.Customerid))
+            .ToDictionaryAsync(c => c.Customerid, c => c.Name);
+
+        var ordered = guests
+            .OrderBy(g => g.Guestlabel != null).ThenBy(g => g.Guestlabel)
+            .Select(g => new
+            {
+                g.Guestlabel, g.Orders, g.Total, g.Printed, g.Customerid,
+                Customername = g.Customerid is int cid ? customerNames.GetValueOrDefault(cid) : null
+            })
+            .ToList();
         return Ok(new { status = "Success", message = "Guests fetched successfully", data = new { tableId, guests = ordered } });
     }
 
@@ -750,6 +775,16 @@ public class OrdersController : ControllerBase
         var table = await _context.Tables.ForBranch(tenant).FirstOrDefaultAsync(t => t.Tableid == tableId);
         if (table == null)
             return NotFound(new { status = "Error", message = "Table not found" });
+
+        Customer? customer = null;
+        if (request.CustomerId is > 0)
+        {
+            customer = await _context.Customers.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Customerid == request.CustomerId && c.Branchid == table.Branchid);
+            if (customer == null)
+                return NotFound(new { status = "Error", message = "Customer not found in this branch" });
+            guestLabel = NormalizeGuest(string.IsNullOrWhiteSpace(customer.Name) ? $"Customer {customer.Customerid}" : customer.Name);
+        }
 
         var detailIds = request.Items.Select(i => i.OrderDetailId).ToList();
         var details = await _context.Orderdetails.Include(d => d.Order)
@@ -778,12 +813,19 @@ public class OrdersController : ControllerBase
             if (wholeOrder)
             {
                 order.Guestlabel = guestLabel;
+                if (customer != null)
+                    order.Customerid = customer.Customerid;
                 relabelled++;
                 notes.Add(order.Ordernumber ?? order.Orderid.ToString());
                 continue;
             }
 
-            newOrder ??= await NewSplitOrder(order, guestLabel, tenant);
+            if (newOrder == null)
+            {
+                newOrder = await NewSplitOrder(order, guestLabel, tenant);
+                if (customer != null)
+                    newOrder.Customerid = customer.Customerid;
+            }
             foreach (var detail in orderGroup)
             {
                 int qty = qtyById[detail.Orderdetailid];
@@ -818,7 +860,7 @@ public class OrdersController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        string guestName = guestLabel ?? "Guest 1";
+        string guestName = guestLabel ?? "Unknown";
         _seating.AddHistory(table.Tableid, table.Branchid, table.Outletid, TableEvents.Split, tenant.UserId,
             orderId: newOrder?.Orderid, notes: $"To {guestName}: {string.Join(", ", notes)}");
         await _context.SaveChangesAsync();

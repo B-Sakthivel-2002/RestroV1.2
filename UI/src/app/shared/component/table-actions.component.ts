@@ -72,19 +72,19 @@ export type TableActionMode = 'transfer' | 'merge' | 'split';
           @if (splitLines.length === 0) {
             <p class="text-muted">No unbilled items on this table.</p>
           } @else {
-            <p class="mb-2">Choose how many of each item go to the other guest.</p>
+            <p class="mb-2">Add the items that the selected customer will pay for.</p>
             <table class="table table-sm align-middle">
-              <thead><tr><th>Item</th><th>Guest</th><th class="text-end">Qty</th><th class="text-center">Move</th></tr></thead>
+              <thead><tr><th>Item</th><th>Customer</th><th class="text-end">Qty</th><th class="text-center">Move</th></tr></thead>
               <tbody>
                 @for (l of splitLines; track l.orderdetailid) {
-                  <tr>
+                  <tr [class.ta-selected]="l.move > 0">
                     <td>{{ l.name }} <small class="text-muted">({{ l.price }})</small></td>
-                    <td>{{ l.guestlabel || 'Guest 1' }}</td>
+                    <td>{{ customerOf(l) }}</td>
                     <td class="text-end">{{ l.qty }}</td>
                     <td class="text-center text-nowrap">
-                      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="l.move = l.move > 0 ? l.move - 1 : 0" [disabled]="l.move === 0" aria-label="Less">-</button>
-                      <span class="ta-move">{{ l.move }}</span>
-                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="l.move = l.move < l.qty ? l.move + 1 : l.qty" [disabled]="l.move === l.qty || !movable(l)" aria-label="More">+</button>
+                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="l.move = l.move < l.qty ? l.move + 1 : l.qty" [disabled]="l.move === l.qty || !movable(l)">Add</button>
+                      @if (l.qty > 1 && l.move > 0) { <span class="ta-move">{{ l.move }} of {{ l.qty }}</span> }
+                      <button type="button" class="btn btn-sm btn-outline-secondary ms-1" (click)="l.move = l.move > 0 ? l.move - 1 : 0" [disabled]="l.move === 0">Remove</button>
                     </td>
                   </tr>
                 }
@@ -92,22 +92,27 @@ export type TableActionMode = 'transfer' | 'merge' | 'split';
             </table>
             <div class="row g-2 align-items-end">
               <div class="col-sm-6">
-                <label class="form-label mb-1" for="taGuest">Move to guest</label>
-                <select id="taGuest" class="form-select" [(ngModel)]="splitTarget">
-                  @for (g of guestOptions; track g.value) {
-                    <option [ngValue]="g.value">{{ g.label }}</option>
+                <label class="form-label mb-1" for="taCustomer">Customer</label>
+                <select id="taCustomer" class="form-select" [(ngModel)]="splitCustomerId">
+                  <option [ngValue]="null" disabled>Select customer</option>
+                  @for (c of customers; track c.customerid) {
+                    <option [ngValue]="c.customerid">{{ c.name }}{{ c.contactnumber ? ' - ' + c.contactnumber : '' }}</option>
                   }
-                  <option [ngValue]="newGuestKey">+ New guest</option>
+                  <option [ngValue]="newCustomerKey">+ Add customer</option>
                 </select>
               </div>
-              @if (splitTarget === newGuestKey) {
-                <div class="col-sm-6">
-                  <label class="form-label mb-1" for="taNewGuest">Guest name</label>
-                  <input id="taNewGuest" class="form-control" [(ngModel)]="newGuestName" maxlength="30" />
+              @if (splitCustomerId === newCustomerKey) {
+                <div class="col-sm-3">
+                  <label class="form-label mb-1" for="taNewName">Customer name</label>
+                  <input id="taNewName" class="form-control" [(ngModel)]="newCustomerName" maxlength="100" />
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label mb-1" for="taNewPhone">Mobile</label>
+                  <input id="taNewPhone" class="form-control" [(ngModel)]="newCustomerPhone" maxlength="20" inputmode="tel" />
                 </div>
               }
             </div>
-            <p class="small text-muted mt-2 mb-0">Afterwards, each guest has a tab on the order screen with its own bill.</p>
+            <p class="small text-muted mt-2 mb-0">Afterwards, each customer has a tab on the order screen with its own bill. A new customer is saved in the customer master.</p>
           }
         }
 
@@ -126,7 +131,8 @@ export type TableActionMode = 'transfer' | 'merge' | 'split';
     .ta-row { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
     .ta-tables { display: flex; flex-wrap: wrap; gap: 8px; }
     .ta-tables .btn { min-width: 72px; }
-    .ta-move { display: inline-block; min-width: 28px; text-align: center; font-weight: 700; }
+    .ta-move { display: inline-block; min-width: 44px; text-align: center; font-weight: 700; font-size: .85rem; }
+    .ta-selected td { background: #e8f0fe; }
   `
 })
 export class TableActionsComponent implements OnInit {
@@ -139,7 +145,7 @@ export class TableActionsComponent implements OnInit {
   branchId: number | null = null;
   onDone?: (result: any) => void;
 
-  readonly newGuestKey = '__new__';
+  readonly newCustomerKey = -1;
 
   loading = true;
   saving = false;
@@ -151,9 +157,10 @@ export class TableActionsComponent implements OnInit {
   targetId: number | null = null;
 
   splitLines: any[] = [];
-  guestOptions: { value: string, label: string }[] = [];
-  splitTarget = '';
-  newGuestName = '';
+  customers: any[] = [];
+  splitCustomerId: number | null = null;
+  newCustomerName = '';
+  newCustomerPhone = '';
 
   constructor(public modalRef: BsModalRef, private query: QueryService) {}
 
@@ -166,7 +173,7 @@ export class TableActionsComponent implements OnInit {
   }
 
   get submitLabel(): string {
-    return this.mode === 'transfer' ? 'Move' : this.mode === 'merge' ? 'Merge' : 'Move items';
+    return this.mode === 'transfer' ? 'Move' : this.mode === 'merge' ? 'Merge' : 'Assign to selected Customer';
   }
 
   ngOnInit(): void {
@@ -187,14 +194,26 @@ export class TableActionsComponent implements OnInit {
       case 'merge':
         return this.mergeCandidates.some(t => t.selected);
       default:
-        return this.splitLines.some(l => l.move > 0 && this.movable(l)) && (this.splitTarget !== this.newGuestKey || !!this.newGuestName.trim());
+        return this.splitLines.some(l => l.move > 0 && this.movable(l)) && this.splitCustomerId !== null
+          && (this.splitCustomerId !== this.newCustomerKey || !!this.newCustomerName.trim());
     }
   }
 
-  // Items already with the chosen guest cannot be moved to that guest.
+  // Who pays for the line: its split customer, else the customer chosen on the order screen (by id), else Unknown.
+  customerOf(line: any): string {
+    return line.guestlabel
+      || line.customername
+      || (line.customerid > 0 ? this.customers.find(c => c.customerid === line.customerid)?.name : null)
+      || 'Unknown';
+  }
+
+  // Items already with the chosen customer cannot be moved to that customer.
   movable(line: any): boolean {
-    const target = this.splitTarget === this.newGuestKey ? this.newGuestName.trim() : this.splitTarget;
-    return (line.guestlabel || '') !== target;
+    if (this.splitCustomerId === null || this.splitCustomerId === this.newCustomerKey) {
+      return true;
+    }
+    const name = this.customers.find(c => c.customerid === this.splitCustomerId)?.name;
+    return !(line.guestlabel && line.guestlabel === name);
   }
 
   submit(): void {
@@ -208,9 +227,8 @@ export class TableActionsComponent implements OnInit {
     } else if (this.mode === 'merge') {
       call = this.query.mergeTables(this.tableId, this.mergeCandidates.filter(t => t.selected).map(t => t.tableid));
     } else {
-      const guest = this.splitTarget === this.newGuestKey ? this.newGuestName.trim() : this.splitTarget;
-      const items = this.splitLines.filter(l => l.move > 0 && this.movable(l)).map(l => ({ orderDetailId: l.orderdetailid, qty: l.move }));
-      call = this.query.splitOrderItems(this.tableId, guest, items);
+      this.assignToCustomer();
+      return;
     }
 
     call.subscribe({
@@ -234,10 +252,13 @@ export class TableActionsComponent implements OnInit {
       next: (res: any) => {
         const tables: any[] = res.data?.tables || [];
         const others = tables.filter(t => t.tableid !== this.tableId);
-        this.freeTables = others.filter(t => t.state === 'Available' && !t.mergedinto);
-        // Free tables or tables with guests; not blocked, held for a token, cleaning or already merged elsewhere.
+        // Transfer: every table except occupied ones (orders on it, or merged into another table).
+        // Reserved / Blocked tables can still take the transfer.
+        this.freeTables = others.filter(t => t.state !== 'Occupied' && !t.mergedinto);
+        const empty = (t: any) => !t.mergedinto && !t.held && t.state === 'Available';
+        // Empty tables or tables with guests; not blocked, held for a token or already merged elsewhere.
         this.mergeCandidates = others
-          .filter(t => !t.mergedinto && !t.held && (t.state === 'Available' || t.state === 'Occupied'))
+          .filter(t => empty(t) || (!t.mergedinto && !t.held && t.state === 'Occupied'))
           .map(t => ({ ...t, selected: false }));
         done();
       },
@@ -253,32 +274,66 @@ export class TableActionsComponent implements OnInit {
     });
   }
 
+  // Split: creates the customer first when "Add customer" was chosen, then moves the items to them.
+  private assignToCustomer(): void {
+    const items = this.splitLines.filter(l => l.move > 0 && this.movable(l)).map(l => ({ orderDetailId: l.orderdetailid, qty: l.move }));
+    const fail = (err: any) => {
+      this.saving = false;
+      this.errorMessage = err?.error?.message || 'Something went wrong';
+    };
+    const split = (customerId: number) => this.query.splitOrderItems(this.tableId, '', items, customerId).subscribe({
+      next: (res: any) => {
+        this.saving = false;
+        this.modalRef.hide();
+        this.onDone?.({ mode: this.mode, ...res });
+      },
+      error: fail
+    });
+
+    if (this.splitCustomerId !== this.newCustomerKey) {
+      split(this.splitCustomerId!);
+      return;
+    }
+    const customer = {
+      customerid: 0,
+      name: this.newCustomerName.trim(),
+      contactnumber: this.newCustomerPhone.trim(),
+      email: '',
+      address: '',
+      branchid: this.branchId ?? Number(localStorage.getItem('branchid') || 0),
+      outletid: Number(localStorage.getItem('outletid') || 0)
+    };
+    this.query.addCustomer(customer).subscribe({
+      next: (res: any) => {
+        this.query.clearCustomerCache();
+        const id = res?.data?.customerid;
+        if (!id) {
+          fail({ error: { message: 'The customer could not be created' } });
+          return;
+        }
+        split(id);
+      },
+      error: fail
+    });
+  }
+
   private loadSplit(): void {
+    this.query.getBranchCustomers().subscribe({
+      next: (res: any) => this.customers = (res.data || []).slice().sort((a: any, b: any) => String(a.name ?? '').localeCompare(String(b.name ?? ''))),
+      error: () => this.customers = []
+    });
     this.query.getOrderByTableId(this.tableId).subscribe({
       next: (res: any) => {
         const orders: any[] = (res.data || []).filter((o: any) => o.status === 'submitted');
         this.splitLines = orders.flatMap(o => (o.orderdetail || []).map((d: any) => ({
-          ...d, guestlabel: o.guestlabel, move: 0
+          ...d, guestlabel: o.guestlabel, customerid: o.customerid, customername: o.customername, move: 0
         })));
 
-        const labels = Array.from(new Set((res.data || []).map((o: any) => o.guestlabel || '')));
-        this.guestOptions = (labels as string[])
-          .sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
-          .map(l => ({ value: l, label: l || 'Guest 1' }));
-        this.newGuestName = this.nextGuestName(labels as string[]);
-        // Default: a new guest when everything belongs to one guest, else the second guest.
-        this.splitTarget = this.guestOptions.length > 1 ? this.guestOptions[1].value : this.newGuestKey;
+        this.splitCustomerId = null;
         this.loading = false;
       },
       error: () => this.loading = false
     });
   }
 
-  private nextGuestName(labels: string[]): string {
-    let n = 2;
-    while (labels.includes('Guest ' + n)) {
-      n++;
-    }
-    return 'Guest ' + n;
-  }
 }

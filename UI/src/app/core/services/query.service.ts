@@ -1081,12 +1081,14 @@ private branchDirectory$:any;
   }
 
   // tableId null = the system picks the smallest free table that fits.
-  assignWaitlistToken(tokenId: number, tableId: number | null): Observable<any> {
-    return this.http.post(AppSettings.apiUrl + 'Waitlist/' + tokenId + '/Assign', { tableId });
+  // tableIds: one table, or several tables of one floor combined for a big party; null = system picks
+  assignWaitlistToken(tokenId: number, tableIds: number[] | null): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Waitlist/' + tokenId + '/Assign', { tableIds });
   }
 
-  seatWaitlistToken(tokenId: number, tableId: number | null = null): Observable<any> {
-    return this.http.post(AppSettings.apiUrl + 'Waitlist/' + tokenId + '/Seat', { tableId });
+  // tableIds null = seat at the held table(s)
+  seatWaitlistToken(tokenId: number, tableIds: number[] | null = null): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Waitlist/' + tokenId + '/Seat', { tableIds });
   }
 
   cancelWaitlistToken(tokenId: number): Observable<any> {
@@ -1101,7 +1103,7 @@ private branchDirectory$:any;
     return this.http.get(AppSettings.apiUrl + 'Tables/Board' + this.branchQuery(branchId));
   }
 
-  // state: Available | Cleaning | Blocked | Reserved
+  // state: Available | Blocked | Reserved
   setTableState(tableId: number, state: string, notes?: string): Observable<any> {
     return this.http.post(AppSettings.apiUrl + 'Tables/' + tableId + '/State', { state, notes });
   }
@@ -1163,9 +1165,19 @@ private branchDirectory$:any;
     return this.http.get(AppSettings.apiUrl + 'Orders/TableGuests', { params: { tableId } });
   }
 
-  // guestLabel '' = the first guest.
-  splitOrderItems(tableId: number, guestLabel: string, items: { orderDetailId: number, qty: number }[]): Observable<any> {
-    return this.http.post(AppSettings.apiUrl + 'Orders/Split', { tableId, guestLabel, items });
+  // Moves items to a customer from the customer master (customerId), or to a named guest (guestLabel, '' = unassigned).
+  splitOrderItems(tableId: number, guestLabel: string, items: { orderDetailId: number, qty: number }[], customerId: number | null = null): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Orders/Split', { tableId, guestLabel, customerId, items });
+  }
+
+  // The caller's own branch customers, always fresh (not the cached list).
+  getBranchCustomers(): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'Customers');
+  }
+
+  // After a customer is added elsewhere, the cached list must be re-read.
+  clearCustomerCache(): void {
+    this.getCustomer$ = undefined;
   }
 
   getMenuTypes(allBranches: boolean = false):Observable<any>{

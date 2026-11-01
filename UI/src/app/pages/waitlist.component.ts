@@ -7,9 +7,8 @@ import { QueryService } from '@appservices/query.service';
 import { AlertService } from '@appservices/alert.service';
 import { AuthService } from '@appservices/auth.service';
 import { BranchSelectComponent } from '../shared/component/branch-select.component';
-import { TableActionMode, TableActionsComponent } from '../shared/component/table-actions.component';
 
-// Captain's live screen: the walk-in token queue on the left, the table board on the right.
+// Captain's live screen: Queue / Tables / History tabs over all floors of the branch.
 // Refreshes itself every few seconds, so several captains can work on it at once.
 @Component({
   selector: 'app-waitlist',
@@ -24,13 +23,6 @@ import { TableActionMode, TableActionsComponent } from '../shared/component/tabl
         <div class="tt">
           <h2 class="mn-tt">Waitlist &amp; Tables</h2>
           <small class="text-muted">Updated {{ lastUpdated | date:'h:mm:ss a' }}</small>
-        </div>
-        <div class="wl-chips">
-          <span class="wl-chip wl-waiting">Waiting {{ summary?.waiting ?? 0 }}</span>
-          <span class="wl-chip wl-called">Called {{ summary?.called ?? 0 }}</span>
-          @for (s of states; track s) {
-            <span class="wl-chip" [ngClass]="'st-' + s">{{ s }} {{ counts[s] ?? 0 }}</span>
-          }
         </div>
         <div class="btn-bg wl-actions">
           @if (isOwner) {
@@ -47,49 +39,79 @@ import { TableActionMode, TableActionsComponent } from '../shared/component/tabl
         </div>
       }
 
-      <div class="wl-body">
-        <!-- Queue -->
-        <section class="wl-queue">
-          <h3 class="wl-title">Queue</h3>
+      <div class="wl-card">
+        <!-- same table tiles as the Tables tab, always on top -->
+        <ng-container *ngTemplateOutlet="tilesTpl"></ng-container>
+
+        <div class="wl-tabs" role="tablist">
+          <button type="button" role="tab" [class.active]="tab === 'queue'" (click)="tab = 'queue'">Queue</button>
+          <button type="button" role="tab" [class.active]="tab === 'tables'" (click)="tab = 'tables'">Tables</button>
+          <button type="button" role="tab" [class.active]="tab === 'history'" (click)="tab = 'history'">History</button>
+        </div>
+
+        @if (tab === 'tables') {
+          <ng-container *ngTemplateOutlet="tilesTpl"></ng-container>
+        }
+
+        <div class="wl-stats">
+          <div><span class="wl-stat-num wl-num-available">{{ countOf('Available') }}</span><span>Available</span></div>
+          <div><span class="wl-stat-num">{{ summary?.waiting ?? 0 }}</span><span>Waiting</span></div>
+          <div><span class="wl-stat-num">{{ countOf('Occupied') }}</span><span>Occupied</span></div>
+          <div><span class="wl-stat-num">{{ countOf('Reserved') }}</span><span>Reserved</span></div>
+        </div>
+
+        @if (tab === 'queue') {
+          <h3 class="wl-title">Active queue</h3>
           @if (activeTokens.length === 0) {
             <p class="text-muted">No one is waiting.</p>
           }
           @for (t of activeTokens; track t.tokenid) {
-            <div class="wl-token" [class.wl-token-called]="t.status === 'Called'">
-              <div class="wl-token-top">
-                <span class="wl-code">{{ t.tokencode }}</span>
-                <span class="wl-guests"><i class="pi pi-users"></i> {{ t.guests }}</span>
-                <span class="badge" [ngClass]="t.status === 'Called' ? 'bg-success' : 'bg-secondary'">
-                  {{ t.status === 'Called' ? 'Table held' : ('#' + t.position) }}
-                </span>
-              </div>
-              <div class="wl-token-name">{{ t.customername }} <span class="text-muted">&middot; {{ t.mobile }}</span></div>
+            <div class="wl-token">
+              <div class="wl-token-name">{{ t.tokencode }} &middot; {{ t.customername }}</div>
               <div class="wl-token-meta">
-                Waiting {{ t.waitingMinutes }} min
-                @if (t.status === 'Waiting' && t.estimatedMinutes) { &middot; est. {{ t.estimatedMinutes }} min }
-                @if (t.notes) { &middot; <em>{{ t.notes }}</em> }
+                {{ t.guests }} guests &middot;
+                @if (t.status === 'Called') {
+                  {{ tablesOf(t) }}@if (floorNameOf(t.tableid)) {, {{ floorNameOf(t.tableid) }}} ({{ t.assignmode === 'Auto' ? 'system' : 'captain' }})
+                } @else {
+                  Waiting {{ t.waitingMinutes }} min
+                  @if (t.estimatedMinutes) { &middot; est. {{ t.estimatedMinutes }} min }
+                }
+              </div>
+              @if (t.mobile || t.notes) {
+                <div class="wl-token-sub">{{ t.mobile }} @if (t.notes) { &middot; <em>{{ t.notes }}</em> }</div>
+              }
+              <div class="wl-badges">
+                <span class="wl-badge" [ngClass]="t.status === 'Called' ? 'wl-badge-called' : 'wl-badge-waiting'">{{ t.status }}</span>
+                @if (t.status === 'Waiting') { <span class="wl-badge wl-badge-muted">#{{ t.position }}</span> }
+                @if (t.holdOverdue) { <span class="wl-badge wl-badge-late">Not arrived</span> }
               </div>
 
-              @if (t.status === 'Called') {
-                <div class="wl-held">
-                  <strong>{{ t.tablename }}</strong> ({{ t.assignmode === 'Auto' ? 'system' : 'captain' }})
-                  @if (t.holdOverdue) { <span class="badge bg-danger ms-1">Not arrived</span> }
+              <div class="wl-pick" [attr.aria-label]="'Tables for ' + t.tokencode">
+                <span class="wl-pick-label">{{ t.status === 'Called' ? 'Change table:' : 'Choose table(s):' }}</span>
+                @for (tb of freeTables(); track tb.tableid) {
+                  <button type="button" class="wl-pick-chip" [class.active]="isPicked(t, tb)" [disabled]="!canPick(t, tb)" (click)="togglePick(t, tb)"
+                          [title]="'Seats ' + tb.capacity + (floors.length > 1 ? ', ' + floorNameOf(tb.tableid) : '')">
+                    {{ tb.tablename }} &middot; {{ tb.capacity }}
+                  </button>
+                } @empty {
+                  <span class="text-muted small">No free table</span>
+                }
+              </div>
+              @if (picked(t).length) {
+                <div class="wl-pick-sum" [class.wl-pick-short]="pickedSeats(t) < t.guests">
+                  {{ pickedNames(t) }} &middot; {{ pickedSeats(t) }} seats
+                  @if (pickedSeats(t) < t.guests) { &middot; need {{ t.guests }}, add another table on this floor }
                 </div>
               }
 
               <div class="wl-token-actions">
-                <select class="form-select form-select-sm" [(ngModel)]="pick[t.tokenid]" [attr.aria-label]="'Table for ' + t.tokencode">
-                  <option [ngValue]="undefined">{{ t.status === 'Called' ? 'Change table...' : 'Choose table...' }}</option>
-                  @for (tb of freeTablesFor(t); track tb.tableid) {
-                    <option [ngValue]="tb.tableid">{{ tb.tablename }} ({{ tb.capacity }} seats)</option>
-                  }
-                </select>
-                @if (pick[t.tokenid]) {
-                  <button type="button" class="btn btn-sm btn-outline-primary" (click)="assign(t, pick[t.tokenid])">Hold</button>
+                @if (picked(t).length) {
+                  <button type="button" class="btn btn-sm btn-outline-primary" (click)="assign(t, picked(t))" [disabled]="pickedSeats(t) < t.guests">Assign Table</button>
                 } @else if (t.status === 'Waiting') {
-                  <button type="button" class="btn btn-sm btn-outline-primary" (click)="assign(t, null)" title="System picks the smallest free table that fits">Auto</button>
+                  <button type="button" class="btn btn-sm btn-outline-primary" (click)="assign(t, null)" title="System holds the smallest free table that fits (or combines tables of one floor) and calls the customer">Call</button>
                 }
-                <button type="button" class="btn btn-sm btn-success" (click)="seat(t)" [disabled]="t.status !== 'Called' && !pick[t.tokenid]">Seat</button>
+                <button type="button" class="btn btn-sm btn-success" (click)="seat(t)"
+                        [disabled]="picked(t).length ? pickedSeats(t) < t.guests : t.status !== 'Called'">Seat</button>
                 <button type="button" class="btn btn-sm btn-outline-danger" (click)="close(t, t.status === 'Called' ? 'noshow' : 'cancel')"
                         [title]="t.status === 'Called' ? 'Did not come to the table' : 'Left the queue'">
                   {{ t.status === 'Called' ? 'No-show' : 'Cancel' }}
@@ -97,66 +119,63 @@ import { TableActionMode, TableActionsComponent } from '../shared/component/tabl
               </div>
             </div>
           }
+        }
 
-          @if (closedTokens.length) {
-            <button type="button" class="btn btn-link px-0 mt-2" (click)="showClosed = !showClosed">
-              {{ showClosed ? 'Hide' : 'Show' }} today's finished tokens ({{ closedTokens.length }})
-            </button>
-            @if (showClosed) {
-              <table class="table table-sm wl-closed">
-                <tbody>
-                  @for (t of closedTokens; track t.tokenid) {
-                    <tr>
-                      <td>{{ t.tokencode }}</td>
-                      <td>{{ t.customername }}</td>
-                      <td>{{ t.guests }}</td>
-                      <td>{{ t.status }}{{ t.tablename ? ' - ' + t.tablename : '' }}</td>
-                      <td>{{ t.waitingMinutes }} min</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            }
+        @if (tab === 'history') {
+          <h3 class="wl-title">Today's finished tokens</h3>
+          @if (closedTokens.length === 0) {
+            <p class="text-muted">No finished tokens today.</p>
           }
-        </section>
-
-        <!-- Table board -->
-        <section class="wl-board">
-          @if (floors.length === 0) {
-            <p class="text-muted">No active floors / tables in this branch. Add them under Master &gt; Floors and Tables.</p>
-          }
-          @for (fl of floors; track fl.floorid) {
-            <h3 class="wl-title">{{ fl.floorname }}</h3>
-            <div class="wl-tiles">
-              @for (tb of tablesOn(fl.floorid); track tb.tableid) {
-                <button type="button" class="wl-tile" [ngClass]="'st-' + tb.state" (click)="openTable(tb, tableTemplate)">
-                  <span class="wl-tile-name">{{ tb.tablename }}</span>
-                  <span class="wl-tile-cap"><i class="pi pi-users"></i> {{ tb.capacity }}</span>
-                  <span class="wl-tile-state">{{ tb.state }}</span>
-                  @if (tb.mergedinto) {
-                    <span class="wl-tile-info">Merged with {{ tb.mergedintoname }}</span>
-                  } @else if (tb.mergedtables?.length) {
-                    <span class="wl-tile-info">+ {{ tb.mergedtables.join(', ') }}</span>
-                  }
-                  @if (tb.held) {
-                    <span class="wl-tile-info">{{ tb.held.tokencode }} &middot; {{ tb.held.customername }}</span>
-                  } @else if (tb.seated) {
-                    <span class="wl-tile-info">{{ tb.seated.tokencode }} &middot; {{ tb.seated.customername }}</span>
-                  }
-                  @if (tb.openOrders > 0) {
-                    <span class="wl-tile-info">Bill {{ tb.openAmount | number:'1.0-2' }}</span>
-                  }
-                  @if (tb.since && tb.state !== 'Available') {
-                    <span class="wl-tile-since">{{ minutesSince(tb.since) }} min</span>
-                  }
-                </button>
-              }
+          @for (t of closedTokens; track t.tokenid) {
+            <div class="wl-token">
+              <div class="wl-token-name">{{ t.tokencode }} &middot; {{ t.customername }}</div>
+              <div class="wl-token-meta">
+                {{ t.guests }} guests
+                @if (t.tablename) { &middot; {{ tablesOf(t) }}@if (floorNameOf(t.tableid)) {, {{ floorNameOf(t.tableid) }}} }
+                &middot; waited {{ t.waitingMinutes }} min
+              </div>
+              <div class="wl-badges">
+                <span class="wl-badge" [ngClass]="t.status === 'Seated' ? 'wl-badge-seated' : 'wl-badge-late'">{{ t.status === 'NoShow' ? 'No-show' : t.status }}</span>
+              </div>
             </div>
           }
-        </section>
+        }
       </div>
     </div>
   </div>
+
+  <ng-template #tilesTpl>
+  @if (tables.length === 0) {
+    <p class="text-muted mt-3">No active floors / tables in this branch. Add them under Master &gt; Floors and Tables.</p>
+  } @else {
+    <div class="wl-tiles">
+      @for (tb of tables; track tb.tableid) {
+        <button type="button" class="wl-tile" [ngClass]="'st-' + tb.state" (click)="openTable(tb, tableTemplate)">
+          <span class="wl-tile-name">{{ tb.tablename }}</span>
+          @if (floors.length > 1) { <span class="wl-tile-floor">{{ floorNameOf(tb.tableid) }}</span> }
+          <span class="wl-tile-cap"><i class="pi pi-users"></i> {{ tb.capacity }}</span>
+          <span class="wl-tile-state">{{ tb.state }}</span>
+          @if (tb.mergedinto) {
+            <span class="wl-tile-info">Merged with {{ tb.mergedintoname }}</span>
+          } @else if (tb.mergedtables?.length) {
+            <span class="wl-tile-info">+ {{ tb.mergedtables.join(', ') }}</span>
+          }
+          @if (tb.held) {
+            <span class="wl-tile-info">{{ tb.held.tokencode }} &middot; {{ tb.held.customername }}</span>
+          } @else if (tb.seated) {
+            <span class="wl-tile-info">{{ tb.seated.tokencode }} &middot; {{ tb.seated.customername }}</span>
+          }
+          @if (tb.openOrders > 0) {
+            <span class="wl-tile-info">Bill {{ tb.openAmount | number:'1.0-2' }}</span>
+          }
+          @if (tb.since && tb.state !== 'Available') {
+            <span class="wl-tile-since">{{ minutesSince(tb.since) }} min</span>
+          }
+        </button>
+      }
+    </div>
+  }
+  </ng-template>
 
   <ng-template #tableTemplate>
     <div class="modal-header">
@@ -169,15 +188,6 @@ import { TableActionMode, TableActionsComponent } from '../shared/component/tabl
           <p>Merged with <strong>{{ selected.mergedintoname }}</strong>. Its orders are billed on {{ selected.mergedintoname }}.</p>
           <button type="button" class="btn btn-outline-danger mb-3" (click)="unmerge()">Unmerge</button>
         } @else if (!selected.held) {
-          <div class="d-flex flex-wrap gap-2 mb-3">
-            @if (selected.openOrders > 0 || selected.storedState === 'Occupied') {
-              <button type="button" class="btn btn-outline-primary" (click)="tableAction('transfer')"><i class="pi pi-arrow-right-arrow-left"></i> Transfer</button>
-            }
-            <button type="button" class="btn btn-outline-primary" (click)="tableAction('merge')"><i class="pi pi-objects-column"></i> Merge tables</button>
-            @if (selected.openOrders > 0) {
-              <button type="button" class="btn btn-outline-primary" (click)="tableAction('split')"><i class="pi pi-clone"></i> Split bill</button>
-            }
-          </div>
           @if (selected.mergedtables?.length) {
             <p class="small text-muted">Joined tables: {{ selected.mergedtables.join(', ') }}</p>
           }
@@ -192,9 +202,6 @@ import { TableActionMode, TableActionsComponent } from '../shared/component/tabl
           <div class="d-flex flex-wrap gap-2 mb-3">
             @if (selected.storedState !== 'Available') {
               <button type="button" class="btn btn-success" (click)="setState('Available')">Mark ready</button>
-            }
-            @if (selected.storedState !== 'Cleaning') {
-              <button type="button" class="btn btn-outline-warning" (click)="setState('Cleaning')">Cleaning</button>
             }
             @if (selected.storedState !== 'Reserved') {
               <button type="button" class="btn btn-outline-info" (click)="setState('Reserved')">Reserve</button>
@@ -218,12 +225,12 @@ import { TableActionMode, TableActionsComponent } from '../shared/component/tabl
                 @for (h of history; track h.historyid) {
                   <tr>
                     <td class="text-nowrap">{{ h.createdat | date:'d MMM, h:mm a' }}</td>
-                    <td>{{ eventLabel(h.event) }}</td>
+                    <td>{{ eventInfo(h).label }}</td>
                     <td>
-                      @if (h.fromstate || h.tostate) { {{ h.fromstate }} &rarr; {{ h.tostate }} }
-                      @if (h.tokencode) { {{ h.tokencode }} }
-                      @if (h.relatedtable) { ({{ h.relatedtable }}) }
-                      @if (h.notes) { <span class="text-muted">{{ h.notes }}</span> }
+                      {{ eventInfo(h).detail }}
+                      @if (h.tokencode || h.relatedtable) {
+                        <span class="text-muted">{{ h.tokencode }} @if (h.relatedtable) { ({{ h.relatedtable }}) }</span>
+                      }
                     </td>
                     <td>{{ h.username }}</td>
                   </tr>
@@ -239,28 +246,43 @@ import { TableActionMode, TableActionsComponent } from '../shared/component/tabl
   styles: `
     .wl-page { padding-bottom: 16px; }
     .wl-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px; }
-    .wl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .wl-chip { padding: 3px 10px; border-radius: 999px; font-size: .8rem; font-weight: 600; background: #e5e7eb; }
     .wl-actions { display: flex; gap: 8px; align-items: center; }
     .wl-branch ::ng-deep .row { margin: 0 !important; }
     .wl-branch ::ng-deep .col-md-6 { width: auto; padding: 0; }
     .wl-branch ::ng-deep label { display: none; }
-    .wl-body { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 16px; padding: 0 16px; }
-    @media (max-width: 900px) { .wl-body { grid-template-columns: 1fr; } }
-    .wl-title { font-size: 1rem; font-weight: 700; margin: 8px 0; }
-    .wl-token { background: #fff; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; border-left: 4px solid #9ca3af; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-    .wl-token-called { border-left-color: #16a34a; }
-    .wl-token-top { display: flex; align-items: center; gap: 10px; }
-    .wl-code { font-size: 1.3rem; font-weight: 800; }
-    .wl-guests { color: #374151; }
-    .wl-token-top .badge { margin-left: auto; }
-    .wl-token-name { font-weight: 600; margin-top: 2px; }
-    .wl-token-meta { font-size: .8rem; color: #6b7280; }
-    .wl-held { margin-top: 4px; font-size: .9rem; color: #166534; }
-    .wl-token-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .wl-token-actions select { flex: 1 1 140px; }
-    .wl-closed td { font-size: .8rem; }
-    .wl-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .wl-card { background: var(--rp-surface, #fff); border: 1px solid var(--rp-border, #e4e8f0); border-radius: 14px; padding: 16px; margin: 0 16px; }
+    .wl-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .wl-tabs button { border: 1px solid var(--rp-border-strong, #cfd6e3); background: transparent; border-radius: 999px; padding: 8px 12px; font-weight: 600; color: inherit; }
+    .wl-tabs button.active { background: var(--rp-primary, #4361ee); border-color: var(--rp-primary, #4361ee); color: #fff; }
+    .wl-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0 8px; }
+    .wl-stats > div { display: flex; flex-direction: column; gap: 6px; padding-left: 8px; }
+    .wl-stat-num { font-size: 1.4rem; font-weight: 700; }
+    .wl-num-available { color: var(--rp-success, #16a34a); }
+    .wl-title { font-size: 1rem; font-weight: 700; margin: 12px 0 10px; }
+    .wl-token { border: 1px solid var(--rp-border, #e4e8f0); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+    .wl-token-name { font-size: 1.05rem; font-weight: 700; }
+    .wl-token-meta { margin-top: 4px; }
+    .wl-token-sub { font-size: .8rem; color: var(--rp-text-muted, #6b7280); }
+    .wl-badges { display: flex; gap: 6px; margin-top: 6px; }
+    .wl-badge { font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .wl-badge-waiting { background: var(--rp-warning-soft, #fdf3e2); color: var(--rp-warning, #d97706); }
+    .wl-badge-called { background: var(--rp-primary-soft, #eef1fd); color: var(--rp-primary, #4361ee); }
+    .wl-badge-seated { background: var(--rp-success-soft, #e8f7ee); color: var(--rp-success, #16a34a); }
+    .wl-badge-late { background: var(--rp-danger-soft, #fdecec); color: var(--rp-danger, #dc2626); }
+    .wl-badge-muted { background: var(--rp-surface-alt, #f8f9fc); color: var(--rp-text-muted, #6b7280); }
+    .wl-token-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .wl-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+    .wl-pick-label { font-size: .8rem; color: var(--rp-text-muted, #6b7280); }
+    .wl-pick-chip { border: 1px solid var(--rp-border-strong, #cfd6e3); background: var(--rp-surface, #fff); border-radius: 999px; padding: 2px 10px; font-size: .8rem; font-weight: 600; color: inherit; }
+    .wl-pick-chip.active { background: var(--rp-primary, #4361ee); border-color: var(--rp-primary, #4361ee); color: #fff; }
+    .wl-pick-chip:disabled { opacity: .4; }
+    .wl-pick-sum { font-size: .85rem; margin-top: 6px; color: var(--rp-success, #16a34a); }
+    .wl-pick-sum.wl-pick-short { color: var(--rp-danger, #dc2626); }
+    @media (max-width: 600px) { .wl-card { margin: 0 8px; padding: 12px; } }
+    .wl-tiles { display: flex; gap: 10px; overflow-x: auto; margin: 0 0 16px; padding-bottom: 6px; }
+    .wl-tabs + .wl-tiles, .wl-tabs + p { margin-top: 16px; }
+    .wl-tiles .wl-tile { flex: 0 0 150px; }
+    .wl-tile-floor { font-size: .75rem; opacity: .75; }
     .wl-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 0; border-radius: 10px; padding: 10px; min-height: 100px; color: #111827; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
     .wl-tile-name { font-size: 1.15rem; font-weight: 800; }
     .wl-tile-cap, .wl-tile-info, .wl-tile-since { font-size: .78rem; }
@@ -269,16 +291,12 @@ import { TableActionMode, TableActionsComponent } from '../shared/component/tabl
     .st-Available { background: #dcfce7; }
     .st-Occupied { background: #fee2e2; }
     .st-Reserved { background: #dbeafe; }
-    .st-Cleaning { background: #fef3c7; }
     .st-Blocked { background: #d1d5db; }
-    .wl-waiting { background: #e5e7eb; }
-    .wl-called { background: #bbf7d0; }
     .wl-history { max-height: 320px; overflow-y: auto; }
   `
 })
 export class WaitlistComponent implements OnInit, OnDestroy {
 
-  readonly states = ['Available', 'Occupied', 'Reserved', 'Cleaning', 'Blocked'];
   private readonly refreshMs = 8000;
 
   isOwner = false;
@@ -292,10 +310,10 @@ export class WaitlistComponent implements OnInit, OnDestroy {
   tables: any[] = [];
   counts: { [state: string]: number | undefined } = {};
   lastUpdated: Date | null = null;
-  showClosed = false;
+  tab: 'queue' | 'tables' | 'history' = 'queue';
 
   // Table chosen in each token's dropdown, by token id.
-  pick: { [tokenId: number]: number | undefined } = {};
+  pick: { [tokenId: number]: number[] | undefined } = {};
 
   selected: any = null;
   history: any[] = [];
@@ -362,27 +380,66 @@ export class WaitlistComponent implements OnInit, OnDestroy {
     });
   }
 
-  tablesOn(floorId: number): any[] {
-    return this.tables.filter(t => t.floorid === floorId);
+
+  countOf(state: string): number {
+    return this.tables.filter(t => t.state === state).length;
   }
 
-  // Free tables that seat the party, smallest first.
-  freeTablesFor(token: any): any[] {
+  floorNameOf(tableId: number | null): string {
+    const table = this.tables.find(t => t.tableid === tableId);
+    return this.floors.find(f => f.floorid === table?.floorid)?.floorname || '';
+  }
+
+  // Free tables (not held, not merged), by floor then size.
+  freeTables(): any[] {
     return this.tables
-      .filter(t => t.state === 'Available' && t.capacity >= token.guests)
-      .sort((a, b) => a.capacity - b.capacity || String(a.tablename).localeCompare(String(b.tablename)));
+      .filter(t => t.state === 'Available' && !t.mergedinto && !t.mergedtables?.length)
+      .sort((a, b) => a.floorid - b.floorid || a.capacity - b.capacity || String(a.tablename).localeCompare(String(b.tablename)));
+  }
+
+  picked(token: any): number[] {
+    return this.pick[token.tokenid] || [];
+  }
+
+  isPicked(token: any, table: any): boolean {
+    return this.picked(token).includes(table.tableid);
+  }
+
+  // Combined tables must be on one floor: after the first pick, other floors are greyed out.
+  canPick(token: any, table: any): boolean {
+    const first = this.tables.find(t => t.tableid === this.picked(token)[0]);
+    return !first || first.floorid === table.floorid;
+  }
+
+  togglePick(token: any, table: any): void {
+    const ids = this.picked(token);
+    this.pick[token.tokenid] = ids.includes(table.tableid) ? ids.filter(id => id !== table.tableid) : [...ids, table.tableid];
+  }
+
+  pickedSeats(token: any): number {
+    return this.tables.filter(t => this.picked(token).includes(t.tableid)).reduce((sum, t) => sum + (t.capacity || 0), 0);
+  }
+
+  pickedNames(token: any): string {
+    return this.tables.filter(t => this.picked(token).includes(t.tableid)).map(t => t.tablename).join(' + ');
+  }
+
+  // "Table 1 + Table 2" for a party on combined tables.
+  tablesOf(token: any): string {
+    return [token.tablename, ...(token.combinedtables || [])].filter(Boolean).join(' + ');
   }
 
   minutesSince(value: string): number {
     return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
   }
 
-  assign(token: any, tableId: number | null | undefined): void {
-    this.run(this.query.assignWaitlistToken(token.tokenid, tableId ?? null), token);
+  assign(token: any, tableIds: number[] | null): void {
+    this.run(this.query.assignWaitlistToken(token.tokenid, tableIds?.length ? tableIds : null), token);
   }
 
   seat(token: any): void {
-    this.run(this.query.seatWaitlistToken(token.tokenid, this.pick[token.tokenid] ?? null), token);
+    const ids = this.picked(token);
+    this.run(this.query.seatWaitlistToken(token.tokenid, ids.length ? ids : null), token);
   }
 
   close(token: any, kind: 'cancel' | 'noshow'): void {
@@ -422,27 +479,6 @@ export class WaitlistComponent implements OnInit, OnDestroy {
     });
   }
 
-  tableAction(mode: TableActionMode): void {
-    const table = this.selected;
-    if (!table) {
-      return;
-    }
-    this.modalRef?.hide();
-    this.modalService.show(TableActionsComponent, {
-      class: 'modal-lg',
-      initialState: {
-        mode,
-        tableId: table.tableid,
-        tableName: table.tablename,
-        branchId: this.isOwner ? this.branchId : null,
-        onDone: (res: any) => {
-          this.alertService.showAlert('Success', res.message || 'Done');
-          this.refresh();
-        }
-      }
-    });
-  }
-
   unmerge(): void {
     if (!this.selected) {
       return;
@@ -456,19 +492,27 @@ export class WaitlistComponent implements OnInit, OnDestroy {
     });
   }
 
-  eventLabel(evt: string): string {
-    switch (evt) {
-      case 'TransferOut': return 'Moved out';
-      case 'TransferIn': return 'Moved in';
-      case 'Merged': return 'Merged';
-      case 'Unmerged': return 'Separated';
-      case 'Split': return 'Split bill';
-      case 'StateChanged': return 'State changed';
-      case 'TokenAssigned': return 'Held for token';
-      case 'TokenReleased': return 'Hold released';
-      case 'Seated': return 'Seated';
-      case 'Released': return 'Freed after bill';
-      default: return evt;
+  // History wording shown to staff; events not in the list (merge/split/reserve/block) keep a plain label.
+  eventInfo(h: any): { label: string, detail: string } {
+    switch (h.event) {
+      case 'TokenAssigned': return { label: 'Customer Called', detail: 'Customer called for seating' };
+      case 'Seated': return { label: 'Customer Seated', detail: 'Customer assigned to a table' };
+      case 'TransferOut':
+      case 'TransferIn': return { label: 'Table Changed', detail: 'Customer moved to another table' };
+      case 'TokenReleased':
+        // a called token released because it went to a different table, not cancelled
+        return /moved to|instead/.test(h.notes || '')
+          ? { label: 'Table Changed', detail: 'Customer moved to another table' }
+          : { label: 'Token Cancelled', detail: 'Queue token cancelled' };
+      case 'Released': return { label: 'Bill Settled', detail: 'Customer bill completed' };
+      case 'StateChanged':
+        if (h.fromstate === 'Reserved' && h.tostate !== 'Reserved') return { label: 'Reservation Cancelled', detail: 'Table reservation cancelled' };
+        if (h.tostate === 'Available') return { label: 'Table Available', detail: 'Table became available' };
+        return { label: 'Table ' + h.tostate, detail: 'Table marked ' + (h.tostate || '').toLowerCase() };
+      case 'Merged': return { label: 'Merged', detail: 'Tables merged' };
+      case 'Unmerged': return { label: 'Separated', detail: 'Merged tables separated' };
+      case 'Split': return { label: 'Split Bill', detail: 'Bill split between customers' };
+      default: return { label: h.event, detail: h.notes || '' };
     }
   }
 

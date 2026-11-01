@@ -41,9 +41,8 @@ public static class TableStates
     public const string Available = "Available";
     public const string Occupied = "Occupied";
     public const string Reserved = "Reserved";
-    public const string Cleaning = "Cleaning";
     public const string Blocked = "Blocked";
 
     // States a captain may set by hand (Occupied comes from seating / open orders).
-    public static readonly string[] Manual = { Available, Reserved, Cleaning, Blocked };
+    public static readonly string[] Manual = { Available, Reserved, Blocked };
 }

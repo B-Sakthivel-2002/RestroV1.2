@@ -48,7 +48,8 @@ public class CategoriesController : ControllerBase
         var cat = new Category
         {
             Categoryname = category.Categoryname,
-            Flag = false
+            Flag = false,
+            Expressstall = category.Expressstall
         };
         cat.StampBranch(tenant, category.Branchid);
         await _context.Categories.AddAsync(cat);

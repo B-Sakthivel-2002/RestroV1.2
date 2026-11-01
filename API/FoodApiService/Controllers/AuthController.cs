@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -22,29 +23,29 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public IActionResult Login([FromBody] LoginModel model)
+    public async Task<IActionResult> Login([FromBody] LoginModel model)
     {
-        var user = _context.Users.FirstOrDefault(u => u.Username == model.username && u.Password == model.password && u.Status == true);
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == model.username && u.Password == model.password && u.Status == true);
         if (user == null)
         {
             return Ok(new { status = "Error", message = "Invalid credentials", data = (object)null });
         }
 
-        int roleid = _context.Userroles.Where(r => r.Userid == user.Userid).Select(p => p.Roleid).FirstOrDefault();
-        string rolename = _context.Roles.Where(p => p.Roleid == roleid).Select(p => p.Rolename).FirstOrDefault();
+        int roleid = await _context.Userroles.Where(r => r.Userid == user.Userid).Select(p => p.Roleid).FirstOrDefaultAsync();
+        string rolename = await _context.Roles.Where(p => p.Roleid == roleid).Select(p => p.Rolename).FirstOrDefaultAsync();
 
         if (rolename == null)
         {
             return Ok(new { status = "Error", message = "Role not assigned", data = (object)null });
         }
 
-        var branch = _context.Branches
+        var branch = await _context.Branches
             .Where(b => b.Branchid == user.Branchid)
             .Select(b => new { b.Branchid, b.Branchname, b.Outletid })
-            .FirstOrDefault();
+            .FirstOrDefaultAsync();
         int branchid = user.Branchid.GetValueOrDefault();
         int outletid = user.Outletid ?? branch?.Outletid ?? 0;
-        string? outletname = _context.Outlets.Where(o => o.Outletid == outletid).Select(o => o.Outletname).FirstOrDefault();
+        string? outletname = await _context.Outlets.Where(o => o.Outletid == outletid).Select(o => o.Outletname).FirstOrDefaultAsync();
 
         string token = GenerateJwtToken(user, rolename, branchid, outletid);
         return Ok(new

@@ -143,6 +143,7 @@ public class HotelContext : DbContext
             entity.Property(e => e.Branchid).HasColumnName("branchid");
             entity.Property(e => e.Categoryname).HasMaxLength(100).HasColumnName("categoryname");
             entity.Property(e => e.Flag).HasColumnName("flag");
+            entity.Property(e => e.Expressstall).HasColumnName("expressstall");
             entity.Property(e => e.Outletid).HasColumnName("outletid");
         });
 

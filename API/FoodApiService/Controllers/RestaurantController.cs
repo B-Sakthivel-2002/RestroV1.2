@@ -52,6 +52,7 @@ public class RestaurantController : ControllerBase
                 Id = mc.Categoryid,
                 Name = mc.Categoryname,
                 Flag = false,
+                ExpressStall = mc.Expressstall,
                 OrderDetail = mc.Items.Where(x => x.Active == true).Select(od => new OrderDetail
                 {
                     ItemID = od.Itemid,

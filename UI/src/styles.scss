@@ -281,6 +281,28 @@ h1, h2, h3, h4, h5, h6{ color: inherit; }
   letter-spacing: -0.01em;
   color: var(--rp-text);
 }
+// branch name as the heading, app name as small text below it
+.custom-navbar-bg .brand-text{
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.custom-navbar-bg .brand-sub{
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--rp-text-muted, #6b7280);
+}
+/* long submenus (Master): 3 columns of 5, filled top-to-bottom */
+@media (min-width: 1200px){
+  .custom-navbar-bg .dropdown-menu.menu-cols.show{
+    display: grid;
+    grid-template-columns: repeat(3, minmax(170px, auto));
+    grid-template-rows: repeat(5, auto);
+    grid-auto-flow: column;
+    column-gap: 4px;
+  }
+}
 .custom-navbar-bg .brand-mark{
   width: 34px;
   height: 34px;

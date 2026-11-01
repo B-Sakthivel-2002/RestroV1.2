@@ -22,6 +22,9 @@ public class AssignTokenRequest
 {
     // Null = let the system pick the smallest free table that fits.
     public int? TableId { get; set; }
+
+    // Several tables of one floor for a big party (combined into the biggest one); overrides TableId.
+    public List<int>? TableIds { get; set; }
 }
 
 // Walk-in token queue of a branch: issue tokens, hold tables for them (system or captain), seat them.
@@ -69,7 +72,11 @@ public class WaitlistController : ControllerBase
             {
                 t.Tokenid, t.Tokencode, t.Customername, t.Mobile, t.Email, t.Guests, t.Notes, t.Status,
                 t.Tableid, Tablename = t.Table != null ? t.Table.Tablename : null, t.Assignmode,
-                t.Createdat, t.Calledat, t.Seatedat, t.Closedat
+                t.Createdat, t.Calledat, t.Seatedat, t.Closedat,
+                Combinedtables = _context.Tables
+                    .Where(m => m.Mergedinto != null && m.Mergedinto == t.Tableid
+                                && (t.Status == TokenStatus.Called || t.Status == TokenStatus.Seated))
+                    .OrderBy(m => m.Tablename).Select(m => m.Tablename).ToList()
             })
             .ToListAsync();
 
@@ -82,7 +89,7 @@ public class WaitlistController : ControllerBase
             return new
             {
                 t.Tokenid, t.Tokencode, t.Customername, t.Mobile, t.Email, t.Guests, t.Notes, t.Status,
-                t.Tableid, t.Tablename, t.Assignmode, t.Createdat, t.Calledat, t.Seatedat, t.Closedat,
+                t.Tableid, t.Tablename, t.Combinedtables, t.Assignmode, t.Createdat, t.Calledat, t.Seatedat, t.Closedat,
                 Position = pos,
                 EstimatedMinutes = pos.HasValue ? Estimate(pos.Value - 1, suitableTables) : (int?)null,
                 WaitingMinutes = (int)((t.Seatedat ?? t.Closedat ?? now) - t.Createdat).TotalMinutes,
@@ -186,12 +193,16 @@ public class WaitlistController : ControllerBase
         if (token == null)
             return NotFound(new { status = "Error", message = "Token not found" });
 
-        var table = await _seating.FindBestTableAsync(token.Branchid!.Value, token.Guests);
+        var plan = await _seating.FindBestPlanAsync(token.Branchid!.Value, token.Guests);
         return Ok(new
         {
             status = "Success",
-            message = table == null ? "No free table fits this party right now" : $"Suggested table {table.Tablename}",
-            data = table == null ? null : new { table.Tableid, table.Tablename, table.Capacity, table.Floorid }
+            message = plan == null ? "No free table fits this party right now" : $"Suggested {plan.Names}",
+            data = plan == null ? null : new
+            {
+                plan.Main.Tableid, plan.Main.Tablename, plan.Capacity, plan.Main.Floorid,
+                tableIds = plan.Tables.Select(t => t.Tableid), tablenames = plan.Names
+            }
         });
     }
 
@@ -207,34 +218,34 @@ public class WaitlistController : ControllerBase
             return BadRequest(new { status = "Error", message = $"Token is already {token.Status}" });
 
         int branch = token.Branchid!.Value;
-        Table? table;
+        TablePlan? plan;
         string mode;
-        if (request?.TableId is int tableId)
+        var chosen = ChosenTableIds(request);
+        if (chosen.Count > 0)
         {
-            table = await _context.Tables.FirstOrDefaultAsync(t => t.Tableid == tableId && t.Branchid == branch);
-            if (table == null)
-                return NotFound(new { status = "Error", message = "Table not found in this branch" });
-            if (token.Tableid == table.Tableid && token.Status == TokenStatus.Called)
-                return Ok(new { status = "Success", message = $"{token.Tokencode} is already holding {table.Tablename}" });
+            var (picked, error) = await LoadPlanAsync(chosen, branch);
+            if (picked == null)
+                return NotFound(new { status = "Error", message = error });
+            plan = picked;
 
-            string? reason = await _seating.CannotHoldReasonAsync(table, token.Guests, token.Tokenid);
+            string? reason = await _seating.CannotHoldReasonAsync(plan, token.Guests, token.Tokenid);
             if (reason != null)
                 return BadRequest(new { status = "Error", message = reason });
             mode = "Manual";
         }
         else
         {
-            table = await _seating.FindBestTableAsync(branch, token.Guests);
-            if (table == null)
+            plan = await _seating.FindBestPlanAsync(branch, token.Guests);
+            if (plan == null)
                 return BadRequest(new { status = "Error", message = $"No free table for {token.Guests} guests right now" });
             mode = "Auto";
         }
 
-        if (!await _seating.TryHoldAsync(token, table, mode, tenant.UserId))
+        if (!await _seating.TryHoldAsync(token, plan, mode, tenant.UserId))
             return Conflict(new { status = "Error", message = "That table was just given to another token. Please try again." });
 
         await _seating.NotifyAsync(branch);
-        return Ok(new { status = "Success", message = $"{token.Tokencode} -> {table.Tablename}", data = new { token.Tokenid, token.Tableid, table.Tablename } });
+        return Ok(new { status = "Success", message = $"{token.Tokencode} -> {plan.Names}", data = new { token.Tokenid, token.Tableid, plan.Main.Tablename, tablenames = plan.Names } });
     }
 
     // The party sits down: at its held table, or directly at a given free table.
@@ -249,21 +260,30 @@ public class WaitlistController : ControllerBase
             return BadRequest(new { status = "Error", message = $"Token is already {token.Status}" });
 
         int branch = token.Branchid!.Value;
-        int? tableId = request?.TableId ?? token.Tableid;
-        if (tableId == null)
+        var chosen = ChosenTableIds(request);
+        if (chosen.Count == 0 && token.Status == TokenStatus.Called && token.Tableid.HasValue)
+        {
+            // the held table plus the tables combined with it
+            chosen.Add(token.Tableid.Value);
+            chosen.AddRange(await _context.Tables.Where(t => t.Mergedinto == token.Tableid).Select(t => t.Tableid).ToListAsync());
+        }
+        if (chosen.Count == 0)
             return BadRequest(new { status = "Error", message = "Choose a table first" });
 
-        var table = await _context.Tables.FirstOrDefaultAsync(t => t.Tableid == tableId && t.Branchid == branch);
-        if (table == null)
-            return NotFound(new { status = "Error", message = "Table not found in this branch" });
+        var (plan, error) = await LoadPlanAsync(chosen, branch);
+        if (plan == null)
+            return NotFound(new { status = "Error", message = error });
+        var table = plan.Main;
 
-        string? reason = await _seating.CannotHoldReasonAsync(table, token.Guests, token.Tokenid);
+        string? reason = await _seating.CannotHoldReasonAsync(plan, token.Guests, token.Tokenid);
         if (reason != null)
             return BadRequest(new { status = "Error", message = reason });
 
-        if (token.Status == TokenStatus.Called && token.Tableid != table.Tableid)
-            _seating.AddHistory(token.Tableid!.Value, token.Branchid, token.Outletid, TableEvents.TokenReleased, tenant.UserId,
-                tokenId: token.Tokenid, notes: $"{token.Tokencode} seated at {table.Tablename} instead");
+        int? previousTable = token.Status == TokenStatus.Called ? token.Tableid : null;
+        if (previousTable.HasValue && previousTable != table.Tableid)
+            _seating.AddHistory(previousTable.Value, token.Branchid, token.Outletid, TableEvents.TokenReleased, tenant.UserId,
+                tokenId: token.Tokenid, notes: $"{token.Tokencode} seated at {plan.Names} instead");
+        await _seating.CombineAsync(token, previousTable, plan, TableStates.Occupied, tenant.UserId);
 
         token.Status = TokenStatus.Seated;
         token.Tableid = table.Tableid;
@@ -275,7 +295,7 @@ public class WaitlistController : ControllerBase
         await _context.SaveChangesAsync();
 
         await _seating.NotifyAsync(branch);
-        return Ok(new { status = "Success", message = $"{token.Tokencode} seated at {table.Tablename}", data = new { token.Tokenid, table.Tableid, table.Tablename, table.Floorid } });
+        return Ok(new { status = "Success", message = $"{token.Tokencode} seated at {plan.Names}", data = new { token.Tokenid, table.Tableid, table.Tablename, table.Floorid, tablenames = plan.Names } });
     }
 
     [HttpPost("{id}/Cancel")]
@@ -298,6 +318,13 @@ public class WaitlistController : ControllerBase
             _seating.AddHistory(token.Tableid!.Value, token.Branchid, token.Outletid, TableEvents.TokenReleased, tenant.UserId,
                 tokenId: token.Tokenid, notes: $"{token.Tokencode} {status}");
 
+        if (freedTable)
+        {
+            // tables combined with the held one are free again
+            var held = await _context.Tables.FirstAsync(t => t.Tableid == token.Tableid);
+            await _seating.CombineAsync(token, null, new TablePlan(held, new List<Table>()), TableStates.Available, tenant.UserId);
+        }
+
         token.Status = status;
         token.Closedat = DateTime.Now;
         token.Updatedby = tenant.UserId;
@@ -308,6 +335,23 @@ public class WaitlistController : ControllerBase
             await _seating.AutoAssignAsync(token.Branchid!.Value, tenant.UserId);
         await _seating.NotifyAsync(token.Branchid);
         return Ok(new { status = "Success", message = $"{token.Tokencode} marked {status}" });
+    }
+
+    private static List<int> ChosenTableIds(AssignTokenRequest? request)
+    {
+        if (request?.TableIds is { Count: > 0 } ids)
+            return ids.Distinct().ToList();
+        return request?.TableId is int id ? new List<int> { id } : new List<int>();
+    }
+
+    // The chosen tables of this branch; the biggest one is the main table.
+    private async Task<(TablePlan? plan, string? error)> LoadPlanAsync(List<int> tableIds, int branch)
+    {
+        var tables = await _context.Tables.Where(t => tableIds.Contains(t.Tableid) && t.Branchid == branch).ToListAsync();
+        if (tables.Count != tableIds.Count)
+            return (null, "Table not found in this branch");
+        var ordered = tables.OrderByDescending(t => t.Capacity).ThenBy(t => t.Tablename).ToList();
+        return (new TablePlan(ordered[0], ordered.Skip(1).ToList()), null);
     }
 
     // Rough wait: parties ahead share the branch's tables, MinutesPerParty each.

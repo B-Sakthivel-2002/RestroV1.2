@@ -18,8 +18,10 @@ public class BillController : ControllerBase
     private readonly ITenantContext _tenant;
     private readonly DocumentNumberService _numbers;
     private readonly SeatingService _seating;
-    public BillController(HotelContext context, IHubContext<KOTNotificationHub> hub, IConfiguration configuration, ITenantContext tenant, DocumentNumberService numbers, SeatingService seating)
+    private readonly PrintQueue _printQueue;
+    public BillController(HotelContext context, IHubContext<KOTNotificationHub> hub, IConfiguration configuration, ITenantContext tenant, DocumentNumberService numbers, SeatingService seating, PrintQueue printQueue)
     {
+        _printQueue = printQueue;
         _context = context;
         _hub = hub;
         _configuration = configuration;
@@ -134,70 +136,7 @@ public class BillController : ControllerBase
                 }
                 await _context.SaveChangesAsync();
                 await _seating.ReleaseIfFreeAsync(orders.Select(o => o.Tableid), userid);
-                
-                // Place directly after:
-                // await _context.SaveChangesAsync(); // (after updating orders loop)
-
-                // =============================
-                // SignalR Notification (OrderSettled)
-                // =============================
-                foreach (var ord in orders)
-                {
-                    var orderTypeName = await _context.Ordertypes
-                        .Where(ot => ot.Ordertypeid == ord.Ordertypeid)
-                        .Select(ot => ot.Ordertypename)
-                        .FirstOrDefaultAsync();
-
-                    var captainName = await _context.Users
-                        .Where(u => u.Userid == ord.Createdby)
-                        .Select(u => u.Username)
-                        .FirstOrDefaultAsync() ?? username;
-
-                    var orderDetails = await _context.Orderdetails
-                        .Where(od => od.Orderid == ord.Orderid)
-                        .Select(od => new
-                        {
-                            OrderDetailId = od.Orderdetailid,
-                            OrderId = od.Orderid,
-                            ItemId = od.Itemid,
-                            Name = _context.Items
-                                .Where(i => i.Itemid == od.Itemid)
-                                .Select(i => i.Itemname)
-                                .FirstOrDefault(),
-                            Qty = od.Qty,
-                            Price = od.Price,
-                            SumOfPrice = od.Sumofprice,
-                            KOTStatus = od.KOTStatus
-                        })
-                        .ToListAsync();
-
-                    var settledOrderPayload = new
-                    {
-                        OrderId = ord.Orderid,
-                        OrderNumber = ord.Ordernumber,
-                        OrderStatus = ord.Status,
-                        BillId = bill.Billid,
-                        BillNumber = bill.Billnumber,
-                        LifecycleStatus = bill.Lifecyclestatus,
-                        Captain = captainName,
-                        Date = ord.Timedate.ToString("yyyy-MM-dd HH:mm:ss"),
-                        OrderTypeId = ord.Ordertypeid,
-                        OrderTypeName = orderTypeName,
-                        OrderDetails = orderDetails
-                    };
-
-                    // Wrap with Key and Value payload structure
-                    var signalRData = new
-                    {
-                        Key = "Cashier", // Set to your target audience key (e.g., "Settled", "Captain", or "Cashier")
-                        Value = settledOrderPayload
-                    };
-
-                    await _hub.Clients.Groups(KOTNotificationHub.GroupsFor(bill.Branchid)).SendAsync("OrderSettled", signalRData);
-                }
-                // =============================
-                // SignalR end
-                // =============================
+                await SendOrderSettledAsync(bill, orders, username);
             }
 
             bool printFailed = false;
@@ -206,7 +145,7 @@ public class BillController : ControllerBase
             {
                 try
                 {
-                    PrintBill(bill.Billid);
+                    await PrintBillAsync(bill.Billid);
                 }
                 catch (Exception ex)
                 {
@@ -215,43 +154,7 @@ public class BillController : ControllerBase
                 }
             }
 
-
-
-
-            // =============================
-            // SignalR Notification (Table Status)
-            // =============================
-
-            foreach (var ord in orders)
-            {
-                if (ord.Tableid == null || ord.Tableid <= 0)
-                    continue;
-
-                var table = await _context.Tables
-                    .FirstOrDefaultAsync(t => t.Tableid == ord.Tableid);
-
-                if (table == null)
-                    continue;
-
-                var tableStatusPayload = new
-                {
-                    tableid = table.Tableid,
-                    floorid = table.Floorid,
-                    orderTotalAmount = ord.Totalprice ?? 0,
-                    orderStatus = ord.Status,
-                    printStatus = ord.PrintedF
-                };
-
-                await _hub.Clients.Groups(KOTNotificationHub.GroupsFor(bill.Branchid)).SendAsync(
-                    "TableStatus",
-                    tableStatusPayload
-                );
-            }
-
-            // =============================
-            // SignalR Notification End
-            // =============================
-
+            await SendTableStatusAsync(bill, orders);
 
             return Ok(new
             {
@@ -312,6 +215,8 @@ public class BillController : ControllerBase
             }
             await _context.SaveChangesAsync();
             await _seating.ReleaseIfFreeAsync(orders.Select(o => o.Tableid), userid);
+            // Same notifications as CreateBill: settling a printed bill must reach the KOT / table screens too.
+            await SendOrderSettledAsync(bill, orders, tenant.Username);
 
             bool printFailed = false;
             string printError = "";
@@ -319,7 +224,7 @@ public class BillController : ControllerBase
             {
                 try
                 {
-                    PrintBill(bill.Billid);
+                    await PrintBillAsync(bill.Billid);
                 }
                 catch (Exception ex)
                 {
@@ -327,6 +232,8 @@ public class BillController : ControllerBase
                     printError = ex.Message;
                 }
             }
+
+            await SendTableStatusAsync(bill, orders);
 
             return Ok(new
             {
@@ -340,6 +247,109 @@ public class BillController : ControllerBase
         {
             return BadRequest(new { status = "Error", message = ex.Message + " " + ex.InnerException?.Message });
         }
+    }
+
+    // SignalR "OrderSettled" for every order of the bill (sent by CreateBill and UpdateBill).
+    private async Task SendOrderSettledAsync(Billheader bill, List<Order> orders, string username)
+    {
+        // =============================
+        // SignalR Notification (OrderSettled)
+        // =============================
+        foreach (var ord in orders)
+        {
+            var orderTypeName = await _context.Ordertypes
+                .Where(ot => ot.Ordertypeid == ord.Ordertypeid)
+                .Select(ot => ot.Ordertypename)
+                .FirstOrDefaultAsync();
+
+            var captainName = await _context.Users
+                .Where(u => u.Userid == ord.Createdby)
+                .Select(u => u.Username)
+                .FirstOrDefaultAsync() ?? username;
+
+            var orderDetails = await _context.Orderdetails
+                .Where(od => od.Orderid == ord.Orderid)
+                .Select(od => new
+                {
+                    OrderDetailId = od.Orderdetailid,
+                    OrderId = od.Orderid,
+                    ItemId = od.Itemid,
+                    Name = _context.Items
+                        .Where(i => i.Itemid == od.Itemid)
+                        .Select(i => i.Itemname)
+                        .FirstOrDefault(),
+                    Qty = od.Qty,
+                    Price = od.Price,
+                    SumOfPrice = od.Sumofprice,
+                    KOTStatus = od.KOTStatus
+                })
+                .ToListAsync();
+
+            var settledOrderPayload = new
+            {
+                OrderId = ord.Orderid,
+                OrderNumber = ord.Ordernumber,
+                OrderStatus = ord.Status,
+                BillId = bill.Billid,
+                BillNumber = bill.Billnumber,
+                LifecycleStatus = bill.Lifecyclestatus,
+                Captain = captainName,
+                Date = ord.Timedate.ToString("yyyy-MM-dd HH:mm:ss"),
+                OrderTypeId = ord.Ordertypeid,
+                OrderTypeName = orderTypeName,
+                OrderDetails = orderDetails
+            };
+
+            // Wrap with Key and Value payload structure
+            var signalRData = new
+            {
+                Key = "Cashier", // Set to your target audience key (e.g., "Settled", "Captain", or "Cashier")
+                Value = settledOrderPayload
+            };
+
+            await _hub.Clients.Groups(KOTNotificationHub.GroupsFor(bill.Branchid)).SendAsync("OrderSettled", signalRData);
+        }
+        // =============================
+        // SignalR end
+        // =============================
+    }
+
+    // SignalR "TableStatus" for the tables of the bill's orders (sent by CreateBill and UpdateBill).
+    private async Task SendTableStatusAsync(Billheader bill, List<Order> orders)
+    {
+        // =============================
+        // SignalR Notification (Table Status)
+        // =============================
+
+        foreach (var ord in orders)
+        {
+            if (ord.Tableid == null || ord.Tableid <= 0)
+                continue;
+
+            var table = await _context.Tables
+                .FirstOrDefaultAsync(t => t.Tableid == ord.Tableid);
+
+            if (table == null)
+                continue;
+
+            var tableStatusPayload = new
+            {
+                tableid = table.Tableid,
+                floorid = table.Floorid,
+                orderTotalAmount = ord.Totalprice ?? 0,
+                orderStatus = ord.Status,
+                printStatus = ord.PrintedF
+            };
+
+            await _hub.Clients.Groups(KOTNotificationHub.GroupsFor(bill.Branchid)).SendAsync(
+                "TableStatus",
+                tableStatusPayload
+            );
+        }
+
+        // =============================
+        // SignalR Notification End
+        // =============================
     }
 
     [HttpGet("GetAllBills")]
@@ -967,29 +977,57 @@ public class BillController : ControllerBase
         return Ok(new { status = "Success", data });
     }
 
-    private void PrintBill(int billId)
+    // Loads everything the bill needs, then prints it through the print queue (never on the request
+    // thread). Throws when printing failed; a bill still printing after PrinterSettings:WaitSeconds
+    // counts as printed and finishes in the background.
+    private async Task PrintBillAsync(int billId)
     {
-        var bill = _context.Billheaders
+        var bill = await _context.Billheaders.AsNoTracking()
             .Include(x => x.Billdetails)
                 .ThenInclude(d => d.Order)
                     .ThenInclude(o => o.Orderdetails)
-            .FirstOrDefault(x => x.Billid == billId);
+            .FirstOrDefaultAsync(x => x.Billid == billId);
 
         if (bill == null) return;
 
         string hotelName = _configuration["RestaurantSettings:HotelName"] ?? "RESTAURANT";
         string hotelDescription = _configuration["RestaurantSettings:HotelDescription"] ?? "";
-        string cashierName = _context.Users
+        string cashierName = await _context.Users
             .Where(u => (int?)u.Userid == bill.CreatedBy)
             .Select(u => u.Username)
-            .FirstOrDefault() ?? "Admin";
+            .FirstOrDefaultAsync() ?? "Admin";
 
-        var printDocument = new PrintDocument();
-        printDocument.DefaultPageSettings.PaperSize = new PaperSize("ThermalRoll", 283, 600);
+        // Order type
+        string orderTypeName = await _context.Billdetails
+            .Where(d => d.Billid == bill.Billid)
+            .Select(d => _context.Ordertypes
+                .Where(x => (int?)x.Ordertypeid == d.Order.Ordertypeid)
+                .Select(x => x.Ordertypename)
+                .FirstOrDefault())
+            .FirstOrDefaultAsync() ?? "TAKEAWAY";
 
-        printDocument.PrintPage += (sender, e) =>
+        // Items grouped by itemid
+        var billItemIds = bill.Billdetails
+            .SelectMany(d => d.Order?.Orderdetails ?? new List<Orderdetail>())
+            .Select(od => od.Itemid).Distinct().ToList();
+        var itemNames = await _context.Items.AsNoTracking()
+            .Where(i => billItemIds.Contains(i.Itemid))
+            .Select(i => new { i.Itemid, i.Itemname })
+            .ToDictionaryAsync(i => i.Itemid, i => i.Itemname);
+        var items = bill.Billdetails
+            .SelectMany(d => d.Order?.Orderdetails ?? new List<Orderdetail>())
+            .GroupBy(od => od.Itemid)
+            .Select(gp => new
+            {
+                ItemName = itemNames.GetValueOrDefault(gp.Key) ?? "Unknown Item",
+                Price = gp.FirstOrDefault().Price,
+                Qty = gp.Sum(x => x.Qty),
+                SubTotal = gp.Sum(x => x.Sumofprice)
+            })
+            .ToList();
+
+        var job = _printQueue.Enqueue(_configuration["PrinterSettings:BillPrinter"], graphics =>
         {
-            Graphics graphics = e.Graphics;
             float y = 10f;
             float left = 10f;
             float width = 263f;
@@ -1023,13 +1061,6 @@ public class BillController : ControllerBase
             y += 15f;
 
             // Order type
-            string orderTypeName = _context.Billdetails
-                .Where(d => d.Billid == bill.Billid)
-                .Select(d => _context.Ordertypes
-                    .Where(x => (int?)x.Ordertypeid == d.Order.Ordertypeid)
-                    .Select(x => x.Ordertypename)
-                    .FirstOrDefault())
-                .FirstOrDefault() ?? "TAKEAWAY";
             graphics.DrawString(orderTypeName.ToUpper(), boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
             y += 15f;
 
@@ -1059,20 +1090,6 @@ public class BillController : ControllerBase
             // Items grouped by itemid
             int itemCount = 0;
             decimal totalQty = 0;
-            var items = bill.Billdetails
-                .SelectMany(d => d.Order?.Orderdetails ?? new List<Orderdetail>())
-                .GroupBy(od => od.Itemid)
-                .Select(gp => new
-                {
-                    ItemName = _context.Items
-                        .Where(i => i.Itemid == gp.Key)
-                        .Select(i => i.Itemname)
-                        .FirstOrDefault() ?? "Unknown Item",
-                    Price = gp.FirstOrDefault().Price,
-                    Qty = gp.Sum(x => x.Qty),
-                    SubTotal = gp.Sum(x => x.Sumofprice)
-                })
-                .ToList();
 
             float nameWidth = 120f;
             foreach (var item in items)
@@ -1129,18 +1146,10 @@ public class BillController : ControllerBase
             y += 20f;
 
             graphics.DrawString(separator, normalFont, Brushes.Black, left, y);
-        };
+        });
 
-        string printerName = _configuration["PrinterSettings:BillPrinter"];
-        if (!string.IsNullOrWhiteSpace(printerName))
-        {
-            printDocument.PrinterSettings.PrinterName = printerName;
-            if (!printDocument.PrinterSettings.IsValid)
-            {
-                throw new Exception($"Bill printer '{printerName}' not found.");
-            }
-        }
-
-        printDocument.Print();
+        string? outcome = (await _printQueue.WaitAsync(new[] { job }))[0];
+        if (!string.IsNullOrEmpty(outcome))
+            throw new Exception(outcome);
     }
 }

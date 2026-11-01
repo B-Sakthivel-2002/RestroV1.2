@@ -126,7 +126,7 @@ public class KitchensController : ControllerBase
         if (kitchen == null)
             return NotFound(new { status = "Error", message = "Kitchen not found", data = (object)null });
 
-        string? error = _kotPrint.PrintTest(kitchen);
+        string? error = await _kotPrint.PrintTestAsync(kitchen);
         return error == null
             ? Ok(new { status = "Success", message = $"Test ticket sent to '{kitchen.Printername}'" })
             : BadRequest(new { status = "Error", message = error });

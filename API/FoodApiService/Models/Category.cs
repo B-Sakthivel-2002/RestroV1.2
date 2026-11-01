@@ -12,6 +12,8 @@ public class Category : IBranchScoped
 
     public bool Flag { get; set; }
 
+    public bool Expressstall { get; set; }
+
     [JsonIgnore]
     public virtual ICollection<Item> Items { get; set; } = new List<Item>();
 

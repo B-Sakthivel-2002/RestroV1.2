@@ -28,7 +28,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { AlertService } from '@appservices/alert.service';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { StorageService } from '@appservices/storage.service';
-import { AppSettings } from '../core/constants/Appsettings';
+import { AppSettings, isExpressStallType } from '../core/constants/Appsettings';
 import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
 
 export interface IShortBillForReport {
@@ -148,7 +148,7 @@ export interface IShortBillForReport {
                   <div class="guest-tabs">
                     @for (g of guestTabs; track g.guestlabel) {
                       <button type="button" class="btn btn-sm" [class.btn-primary]="g.guestlabel === selectedGuest" [class.btn-outline-primary]="g.guestlabel !== selectedGuest" (click)="selectGuest(g.guestlabel)">
-                        {{ g.guestlabel || 'Guest 1' }} &middot; {{ g.total | number:'1.0-2' }}
+                        {{ g.guestlabel || g.customername || 'Unknown' }} &middot; {{ g.total | number:'1.0-2' }}
                         @if (g.printed) { <i class="pi pi-print" title="Bill printed"></i> }
                       </button>
                     }
@@ -735,6 +735,7 @@ export class OrderComponent implements OnInit {
   selectedordertypeid: any = 1;
   waiterList: any = [];
   foodMenuList: any = [];
+  allFoodMenuList: any = [];
   subMenuList: any = [];
   inputTax: any = 5;
   inputDiscount: any = [];
@@ -1077,11 +1078,18 @@ width: 150px;
   onOrderDecrement(ind: any) {}
 
   getParameterValue() {
-    this.activeRoute.paramMap.subscribe((params: any) => {
+    this.activeRoute.paramMap.subscribe(async (params: any) => {
+      const previousTypeId = this.typeId;
       this.tableId = params?.get('tableId');
       this.floorId = params?.get('floorId');
       this.typeId = params?.get('typeId');
       this.tableName = params?.get('tableName');
+      // Angular reuses this screen when moving between menu entries (e.g. Take away -> Express Stall):
+      // drop the unsent order and re-pick the categories for the new order type.
+      if (previousTypeId != null && previousTypeId != this.typeId) {
+        await this.resetPostBill();
+        this.applyMenuFilter();
+      }
       this.getOrderByTable(this.tableId, this.typeId);
       this.getLocalOrderStorage();
     });
@@ -1094,6 +1102,7 @@ width: 150px;
       next: (res: any) => {
         this.orderTypeList = res.data ? res.data : [];
         console.log(res, 'res');
+        this.applyMenuFilter();
       },
       error: (err: any) => {},
       //complete: () => this.stateService.setLoadingState(false)
@@ -1143,14 +1152,32 @@ width: 150px;
     this.query.getFoodMenuList().subscribe({
       next: (res: any) => {
         console.log(res, 'res111');
-        this.foodMenuList = res.menu;
-        this.foodMenuSearchList = this.foodMenuList
-          .map((x: any) => x.orderdetail)
-          .flat();
-        this.getSubMenuList(this.foodMenuList[0].id);
+        this.allFoodMenuList = res.menu;
+        this.applyMenuFilter();
       },
       error: (err: any) => {},
     });
+  }
+
+  get isExpressStall(): boolean {
+    return isExpressStallType(this.orderTypeList.find((x: any) => x.ordertypeid == this.typeId));
+  }
+
+  // Categories marked "Express Stall" in the category master belong to the stall only: the stall screen
+  // lists just those, the other order screens leave them out. Without a stall order type the flag is ignored.
+  applyMenuFilter() {
+    const stallEnabled = this.orderTypeList.some((x: any) => isExpressStallType(x));
+    this.foodMenuList = !stallEnabled
+      ? this.allFoodMenuList
+      : this.allFoodMenuList.filter((x: any) => !!x.expressstall === this.isExpressStall);
+    this.foodMenuSearchList = this.foodMenuList
+      .map((x: any) => x.orderdetail)
+      .flat();
+    if (this.foodMenuList.length) {
+      this.getSubMenuList(this.foodMenuList[0].id);
+    } else {
+      this.subMenuList = [];
+    }
   }
 
   getDiscountList() {
@@ -1332,6 +1359,32 @@ width: 150px;
 
     if (orderDetail.orderid) return;
 
+    // A customer typed in (not picked from the list) is created in the customer master first,
+    // as Settle does, so the KOT is saved with the customer id.
+    if (!this.selectedcustomerid && this.selectedcustomername?.trim()) {
+      this.query
+        .addCustomer({
+          customerid: 0,
+          name: this.selectedcustomername.trim(),
+          contactnumber: this.selectedcustomerphoneno,
+          email: '',
+          address: this.selectedcustomeraddress,
+          branchid: Number(localStorage.getItem('branchid') || 1),
+          outletid: Number(localStorage.getItem('outletid') || 1),
+        })
+        .subscribe({
+          next: (customerRes: any) => {
+            this.selectedcustomerid = customerRes?.data?.customerid || 0;
+            this.query.clearCustomerCache();
+            this.setNewOrder();
+          },
+          error: (err: any) => {
+            this.alertService.showAlert('Error', err?.error?.message || 'Could not save the customer');
+          },
+        });
+      return;
+    }
+
     orderDetail.customerid = this.selectedcustomerid
       ? this.selectedcustomerid
       : 0;
@@ -1465,6 +1518,9 @@ width: 150px;
       this.router.navigate(['/take-away']);
     } else if (this.typeId == 3) {
       this.router.navigate(['/home-delivery']);
+    } else if (this.isExpressStall) {
+      // no list page for the stall: stay here and start the next order
+      this.refreshData();
     } else {
       this.router.navigate(['/']); // fallback route
     }

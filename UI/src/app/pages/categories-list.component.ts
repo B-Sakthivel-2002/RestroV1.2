@@ -10,6 +10,7 @@ import { inject } from '@angular/core';
 import { AuthService } from '@appservices/auth.service';
 import { BranchSelectComponent } from '../shared/component/branch-select.component';
 import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
+import { isExpressStallType } from '../core/constants/Appsettings';
 
 
 @Component({
@@ -34,7 +35,8 @@ import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
                       <tr>      
                         <th scope="col">Category Id</th>
                         <th scope="col">Category Name</th> 
-                        <th scope="col">Status</th>                       
+                        <th scope="col">Status</th>
+                        @if(hasExpressStall){<th scope="col">Express Stall</th>}
                         @if(isOutletOwner){<th scope="col">Branch</th>}
                         <th scope="col" style="width:200px" >Action</th>
                       </tr>
@@ -46,6 +48,7 @@ import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
                           <td>{{fs.categoryid}}</td>
                           <td>{{fs.categoryname}}</td>
                            <td [ngClass]="fs.flag ? 'status-on' : 'status-off'">{{fs.flag ? 'On' : 'Off'}}</td>
+                           @if(hasExpressStall){<td [ngClass]="fs.expressstall ? 'status-on' : 'status-off'">{{fs.expressstall ? 'Yes' : 'No'}}</td>}
                           @if(isOutletOwner){<td>{{fs.branchid | branchName | async}}</td>}
                           <td class="custom-btn">  
                             <button type="button" class="btn btn-primary" (click)="setCategoiresDetail('edit',fs.categoryid);openModal(categoryTemplate);">
@@ -115,6 +118,22 @@ import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
                     />
                   </div>
                 </div>
+              @if(hasExpressStall){
+              <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <label class="form-check-label me-2" for="expressstall">
+                      Express Stall
+                    </label>
+
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="expressstall"
+                      formControlName="expressstall"
+                    />
+                  </div>
+                </div>
+              }
 
               <!-- <div class="col-md-6">
                 <label for="flag" name="flag" class="col-form-label">Status</label>
@@ -145,11 +164,13 @@ export class CategoriesListComponent {
   categoiresFormTitle:String ='Create';
   categoryModalRef?: BsModalRef;
   branchList:any[]=[];
+  hasExpressStall = false;
   initialCategoryForm ={
       categoryid:0,
       categoryname:'',
       branchid:1,
-      flag:true    
+      flag:true,
+      expressstall:false
   }
   constructor(private alertService: AlertService,private modalService: BsModalService,private query:QueryService,private fb:FormBuilder,private cdref: ChangeDetectorRef,private stateService:StateService){
 
@@ -159,12 +180,18 @@ export class CategoriesListComponent {
     
     this.getCategoriesList();
     this.getBranchList();
+    // the Express Stall flag only matters when the outlet has the Express Stall order type
+    this.query.getOrderTypes().subscribe({
+      next: (res: any) => this.hasExpressStall = (res.data || []).some((ot: any) => isExpressStallType(ot)),
+      error: () => {}
+    });
 
     this.categoiresForm = this.fb.group({	
       categoryid:[this.initialCategoryForm.categoryid],
       categoryname:[this.initialCategoryForm.categoryname,Validators.required],
       branchid:[this.initialCategoryForm.branchid,Validators.required],
-      flag:[this.initialCategoryForm.flag,Validators.required  ]    
+      flag:[this.initialCategoryForm.flag,Validators.required  ],
+      expressstall:[this.initialCategoryForm.expressstall]
     })
   }
 
@@ -261,6 +288,7 @@ export class CategoriesListComponent {
           categoryid: localcategoiresForm[0].categoryid,
           categoryname: localcategoiresForm[0].categoryname,
           flag:localcategoiresForm[0].flag,
+          expressstall:!!localcategoiresForm[0].expressstall,
         });
       } else {
         console.error('Category data not found for id:', inputId);

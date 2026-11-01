@@ -32,9 +32,14 @@ builder.Services.AddControllers()
     });
 
 var connectionString = builder.Configuration.GetConnectionString("SSConnectionString");
-builder.Services.AddDbContext<HotelContext>(options =>
+// Pooled contexts: no new DbContext set-up per request when many devices order at once.
+builder.Services.AddDbContextPool<HotelContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions =>
-        npgsqlOptions.MigrationsAssembly(null)));
+        npgsqlOptions.MigrationsAssembly(null)), poolSize: 256);
+
+// IIS starts with few worker threads and adds them slowly; a burst of orders should not have to wait for them.
+ThreadPool.GetMinThreads(out int minWorker, out int minIo);
+ThreadPool.SetMinThreads(Math.Max(minWorker, 64), Math.Max(minIo, 64));
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
@@ -76,6 +81,7 @@ builder.Services.AddScoped<DocumentNumberService>();
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddScoped<SeatingService>();
 builder.Services.AddScoped<KotPrintService>();
+builder.Services.AddSingleton<PrintQueue>();
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
