@@ -4,11 +4,12 @@ import { QueryService } from '@appservices/query.service';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '@appservices/auth.service';
 import { AppSettings, isExpressStallType } from '../core/constants/Appsettings';
+import { OrderAlertsComponent } from '../shared/component/order-alerts.component';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, OrderAlertsComponent],
   template: `
     <header class="custom-navbar-bg">
       <nav class="navbar navbar-expand-xl bg-white">
@@ -23,6 +24,9 @@ import { AppSettings, isExpressStallType } from '../core/constants/Appsettings';
               </span>
             </a>
           </div>
+
+          <!-- Reorder / cancel / ready-to-serve / delay alerts (live). Right of the menu on wide screens. -->
+          <app-order-alerts class="ms-auto me-2 order-xl-last"></app-order-alerts>
 
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navSupportLogoId" aria-controls="navSupportLogoId" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>

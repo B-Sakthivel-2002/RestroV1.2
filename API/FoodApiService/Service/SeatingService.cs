@@ -47,8 +47,11 @@ public class SeatingService
     private readonly WaitlistSettings _settings;
     private readonly ILogger<SeatingService> _logger;
 
-    public SeatingService(HotelContext context, IHubContext<KOTNotificationHub> hub, EmailService email, IConfiguration configuration, ILogger<SeatingService> logger)
+    private readonly WhatsAppService _whatsApp;
+
+    public SeatingService(HotelContext context, IHubContext<KOTNotificationHub> hub, EmailService email, IConfiguration configuration, ILogger<SeatingService> logger, WhatsAppService whatsApp)
     {
+        _whatsApp = whatsApp;
         _logger = logger;
         _context = context;
         _hub = hub;
@@ -247,7 +250,9 @@ public class SeatingService
             return false;
         }
 
-        _email.SendTableReady(token, table, await BranchNameAsync(token.Branchid));
+        string branchName = await BranchNameAsync(token.Branchid);
+        _email.SendTableReady(token, table, branchName);
+        _whatsApp.SendTableReady(token.Mobile, token.Customername, branchName, token.Tokencode, table.Tablename);
         return true;
     }
 

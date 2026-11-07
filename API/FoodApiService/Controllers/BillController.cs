@@ -19,15 +19,78 @@ public class BillController : ControllerBase
     private readonly DocumentNumberService _numbers;
     private readonly SeatingService _seating;
     private readonly PrintQueue _printQueue;
-    public BillController(HotelContext context, IHubContext<KOTNotificationHub> hub, IConfiguration configuration, ITenantContext tenant, DocumentNumberService numbers, SeatingService seating, PrintQueue printQueue)
+    private readonly WhatsAppService _whatsApp;
+    private readonly BillCalculator _calc;
+    private readonly BackgroundPrinter _printer;
+    public BillController(HotelContext context, IHubContext<KOTNotificationHub> hub, IConfiguration configuration, ITenantContext tenant, DocumentNumberService numbers, SeatingService seating, PrintQueue printQueue, WhatsAppService whatsApp, BillCalculator calc, BackgroundPrinter printer)
     {
+        _printer = printer;
+        _calc = calc;
         _printQueue = printQueue;
+        _whatsApp = whatsApp;
         _context = context;
         _hub = hub;
         _configuration = configuration;
         _tenant = tenant;
         _numbers = numbers;
         _seating = seating;
+    }
+
+    public class CalcLineRequest
+    {
+        public int ItemId { get; set; }
+        public int Qty { get; set; }
+    }
+
+    public class CalcRequest
+    {
+        public int? OrderTypeId { get; set; }
+        // Orders already sent to the kitchen (their saved totals are used).
+        public List<int> OrderIds { get; set; } = new();
+        // Lines of the order not sent yet (priced from the item master).
+        public List<CalcLineRequest> NewLines { get; set; } = new();
+        public int? DiscountId { get; set; }
+        // Amount typed for the "customize" discount.
+        public double? CustomDiscount { get; set; }
+    }
+
+    // Order screen: sub total, tax, discount, extra charges and total of the orders on screen,
+    // calculated here (no maths in the browser). Same result CreateBill saves.
+    [HttpPost("Calculate")]
+    public async Task<IActionResult> Calculate([FromBody] CalcRequest request)
+    {
+        var tenant = await _tenant.GetAsync();
+        var ids = (request.OrderIds ?? new()).Distinct().ToList();
+        var orders = await _context.Orders.ForBranch(tenant).AsNoTracking().Where(o => ids.Contains(o.Orderid))
+            .Select(o => new { o.Orderid, o.Totalprice }).ToListAsync();
+        if (orders.Count != ids.Count)
+            return NotFound(new { status = "Error", message = "One or more orders not found" });
+
+        var lines = await _calc.PriceLinesAsync((request.NewLines ?? new()).Where(l => l.Qty > 0).Select(l => (l.ItemId, l.Qty)), tenant.BranchId);
+        double newOrderTotal = BillCalculator.ToFixed(lines.Sum(l => l.Sumofprice), 2);
+        // Same order as the screen lists them: saved orders, then the new one.
+        var totals = ids.Select(id => (double)(orders.First(o => o.Orderid == id).Totalprice ?? 0m)).ToList();
+        if (lines.Count > 0)
+            totals.Add(newOrderTotal);
+
+        var result = await _calc.CalculateAsync(tenant.BranchId, totals, request.OrderTypeId, request.DiscountId, request.CustomDiscount);
+        return Ok(new
+        {
+            status = "Success",
+            data = new
+            {
+                subtotal = result.SubTotal,
+                tax = result.Tax,
+                discount = result.Discount,
+                extraamount = result.ExtraAmount,
+                total = result.Total,
+                taxinclusive = result.TaxInclusive,
+                taxes = result.Taxes,
+                extracharges = result.ExtraCharges,
+                newlines = lines.Select(l => new { itemid = l.Itemid, qty = l.Qty, price = l.Price, sumofprice = l.Sumofprice }),
+                newordertotal = newOrderTotal
+            }
+        });
     }
 
     [HttpPost("CreateBill")]
@@ -73,6 +136,11 @@ public class BillController : ControllerBase
 
             string billnumber = await _numbers.NextAsync(DocumentNumberService.Bill, branchid, order.Businessdate ?? DateHelper.GetBusinessDate(DateTime.Now));
 
+            // Amounts are calculated here from the orders, the chosen discount and BillingSettings:TaxInclusive;
+            // the client's numbers are not used (only the amount typed for a "customize" discount).
+            int? discountId = request.DiscountID?.FirstOrDefault(id => id > 0);
+            var calc = await _calc.CalculateForOrdersAsync(branchid, requestedIds, discountId is > 0 ? discountId : null, (double)request.Discount);
+
             var bill = new Billheader
             {
                 Billnumber = billnumber,
@@ -83,11 +151,11 @@ public class BillController : ControllerBase
                 Billname = request.BillName,
                 Gstin = request.Gstin,
                 Notes = request.Notes,
-                Totalamount = request.TotalAmount,
-                Tax = request.Tax,
-                Subtotal = request.SubTotal,
-                Discount = request.Discount,
-                Extraamount = request.ExtraAmount,
+                Totalamount = (decimal)calc.Total,
+                Tax = (decimal)calc.Tax,
+                Subtotal = (decimal)calc.SubTotal,
+                Discount = (decimal)calc.Discount,
+                Extraamount = (decimal)calc.ExtraAmount,
                 Paidamount = request.Paidamount,
                 Paymentmode = request.Paymentmode,
                 Lifecyclestatus = request.Lifecyclestatus,
@@ -138,20 +206,16 @@ public class BillController : ControllerBase
                 await _seating.ReleaseIfFreeAsync(orders.Select(o => o.Tableid), userid);
                 await SendOrderSettledAsync(bill, orders, username);
             }
+            if (request.Lifecyclestatus == "finalized")
+                await SendPaymentWhatsAppAsync(bill);
 
             bool printFailed = false;
             string printError = "";
             if (request.Lifecyclestatus?.ToLower() == "printed" || request.Lifecyclestatus?.ToLower() == "finalized")
             {
-                try
-                {
-                    await PrintBillAsync(bill.Billid);
-                }
-                catch (Exception ex)
-                {
-                    printFailed = true;
-                    printError = ex.Message;
-                }
+                // Printed in the background: the request does not wait for the printer.
+                // A failure reaches the user (and branch admins) as a live "Printing failed" alert.
+                _printer.QueueBill(bill.Billid, userid, bill.Branchid);
             }
 
             await SendTableStatusAsync(bill, orders);
@@ -159,15 +223,32 @@ public class BillController : ControllerBase
             return Ok(new
             {
                 status = "Success",
-                message = printFailed ? $"Bill created successfully. Printing failed: {printError}" : "Bill created successfully and printed successfully.",
+                message = printFailed ? $"Bill created successfully. Printing failed: {printError}" : "Bill created successfully. Sent to the printer.",
                 billId = bill.Billid,
-                printStatus = printFailed ? "Failed" : "Success"
+                printStatus = printFailed ? "Failed" : "Queued"
             });
         }
         catch (Exception ex)
         {
             return BadRequest(new { status = "Error", message = ex.Message + ex.InnerException });
         }
+    }
+
+    // Settled bill: the customer gets a WhatsApp receipt (bill phone, else the customer master's number).
+    private async Task SendPaymentWhatsAppAsync(Billheader bill)
+    {
+        if (!_whatsApp.IsConfigured)
+            return;
+        string? phone = bill.Phone, name = bill.Billname;
+        if (bill.Customerid is > 0 && (string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(name)))
+        {
+            var customer = await _context.Customers.AsNoTracking().Where(c => c.Customerid == bill.Customerid)
+                .Select(c => new { c.Name, c.Contactnumber }).FirstOrDefaultAsync();
+            phone = string.IsNullOrWhiteSpace(phone) ? customer?.Contactnumber : phone;
+            name = string.IsNullOrWhiteSpace(name) ? customer?.Name : name;
+        }
+        _whatsApp.SendPaymentReceived(phone, name, await _seating.BranchNameAsync(bill.Branchid), bill.Billnumber,
+            bill.Paidamount ?? bill.Totalamount ?? 0m, bill.Paymentmode);
     }
 
     [HttpPost("UpdateBill")]
@@ -198,6 +279,7 @@ public class BillController : ControllerBase
             bill.Iscomplementary = request.Iscomplementary;
             bill.Status = request.Status;
             bill.Updatedby = userid;
+            bool wasPaid = bill.Lifecyclestatus == "finalized";
             bill.Lifecyclestatus = request.Lifecyclestatus;
 
             var orders = await _context.Orders
@@ -217,20 +299,16 @@ public class BillController : ControllerBase
             await _seating.ReleaseIfFreeAsync(orders.Select(o => o.Tableid), userid);
             // Same notifications as CreateBill: settling a printed bill must reach the KOT / table screens too.
             await SendOrderSettledAsync(bill, orders, tenant.Username);
+            if (!wasPaid && bill.Lifecyclestatus == "finalized")
+                await SendPaymentWhatsAppAsync(bill);
 
             bool printFailed = false;
             string printError = "";
             if (request.Lifecyclestatus?.ToLower() == "printed" || request.Lifecyclestatus?.ToLower() == "finalized")
             {
-                try
-                {
-                    await PrintBillAsync(bill.Billid);
-                }
-                catch (Exception ex)
-                {
-                    printFailed = true;
-                    printError = ex.Message;
-                }
+                // Printed in the background: the request does not wait for the printer.
+                // A failure reaches the user (and branch admins) as a live "Printing failed" alert.
+                _printer.QueueBill(bill.Billid, userid, bill.Branchid);
             }
 
             await SendTableStatusAsync(bill, orders);
@@ -238,9 +316,9 @@ public class BillController : ControllerBase
             return Ok(new
             {
                 status = "Success",
-                message = printFailed ? $"Bill updated successfully. Printing failed: {printError}" : "Bill updated successfully and printed successfully.",
+                message = printFailed ? $"Bill updated successfully. Printing failed: {printError}" : "Bill updated successfully. Sent to the printer.",
                 billId = bill.Billid,
-                printStatus = printFailed ? "Failed" : "Success"
+                printStatus = printFailed ? "Failed" : "Queued"
             });
         }
         catch (Exception ex)
@@ -457,16 +535,10 @@ public class BillController : ControllerBase
     [HttpGet("GetBillOrderReport")]
     public async Task<IActionResult> GetBillOrderReport(DateTime? fromDate, DateTime? toDate, string? status, string? orderType, int? branchId = null)
     {
-        var query = _context.Billheaders
-            .OrderByDescending(b => b.Billid)
-            .Include(b => b.Billdetails)
-                .ThenInclude(d => d.Order)
-                    .ThenInclude(o => o.Orderdetails)
-            .AsQueryable();
-
         var tenant = await _tenant.GetAsync();
-
-        query = query.ForBranch(tenant, branchId);
+        // Same filters and result as before, but flat queries + name lookups instead of a sub-query per
+        // bill / order / item (and the order-type filter by id, which used to time out on large data).
+        var query = _context.Billheaders.AsNoTracking().ForBranch(tenant, branchId);
         if (fromDate.HasValue)
         {
             query = query.Where(b => b.Businessdate.Value.Date >= fromDate.Value.Date);
@@ -481,14 +553,57 @@ public class BillController : ControllerBase
         }
         if (!string.IsNullOrWhiteSpace(orderType) && orderType.ToLower() != "all")
         {
-            query = query.Where(b => b.Billdetails.Any(d =>
-                _context.Ordertypes
-                    .Where(o => (int?)o.Ordertypeid == d.Order.Ordertypeid)
-                    .Select(o => o.Ordertypename.ToLower())
-                    .FirstOrDefault() == orderType.ToLower()));
+            string typeName = orderType.ToLower();
+            var typeIds = await _context.Ordertypes.AsNoTracking()
+                .Where(o => o.Ordertypename.ToLower() == typeName)
+                .Select(o => (int?)o.Ordertypeid)
+                .ToListAsync();
+            query = query.Where(b => b.Billdetails.Any(d => typeIds.Contains(d.Order.Ordertypeid)));
         }
 
-        var list = await query.Select(b => new
+        var bills = await query
+            .OrderByDescending(b => b.Datetime).ThenByDescending(b => b.Billid)
+            .Select(b => new
+            {
+                b.Billid, b.Billnumber, b.Billname, b.Gstin, b.Address, b.Customerid, b.Notes, b.Datetime, b.Phone,
+                b.Totalamount, b.Subtotal, b.Extraamount, b.Tax, b.Discount, b.Discountid, b.Taxid, b.Paidamount,
+                b.Paymentmode, b.Status, b.Complementaryreason, b.Iscomplementary, b.Businessdate, b.Lifecyclestatus,
+                b.Branchid, b.CreatedBy
+            })
+            .ToListAsync();
+        var billIds = bills.Select(b => b.Billid).ToList();
+
+        var billOrders = await (from d in _context.Billdetails.AsNoTracking()
+                                join o in _context.Orders.AsNoTracking() on d.Orderid equals o.Orderid
+                                where billIds.Contains(d.Billid)
+                                orderby d.Billdetailid
+                                select new
+                                {
+                                    d.Billid, d.Orderid, o.Ordernumber, o.Timedate, o.Status, o.Totalprice, o.Tableid,
+                                    o.Waiterid, o.Customerid, o.Ordertypeid
+                                })
+            .ToListAsync();
+        var orderIds = billOrders.Select(o => o.Orderid).Distinct().ToList();
+        var lines = await _context.Orderdetails.AsNoTracking()
+            .Where(od => orderIds.Contains(od.Orderid))
+            .OrderBy(od => od.Orderdetailid)
+            .Select(od => new { od.Orderdetailid, od.Orderid, od.Itemid, od.Qty, od.Price, od.Sumofprice })
+            .ToListAsync();
+
+        var itemIdsUsed = lines.Select(l => l.Itemid).Distinct().ToList();
+        var itemNamesById = await _context.Items.AsNoTracking().Where(i => itemIdsUsed.Contains(i.Itemid))
+            .ToDictionaryAsync(i => i.Itemid, i => i.Itemname);
+        var typeNames = await _context.Ordertypes.AsNoTracking().ToDictionaryAsync(o => o.Ordertypeid, o => o.Ordertypename);
+        var branchIdsUsed = bills.Select(b => b.Branchid).Distinct().ToList();
+        var branchNames = await _context.Branches.AsNoTracking().Where(br => branchIdsUsed.Contains((int?)br.Branchid))
+            .ToDictionaryAsync(br => br.Branchid, br => br.Branchname);
+        var userIdsUsed = bills.Select(b => b.CreatedBy).Distinct().ToList();
+        var userNames = await _context.Users.AsNoTracking().Where(u => userIdsUsed.Contains((int?)u.Userid))
+            .ToDictionaryAsync(u => u.Userid, u => u.Username);
+        var linesByOrder = lines.ToLookup(l => l.Orderid);
+        var ordersByBill = billOrders.ToLookup(o => o.Billid);
+
+        var list = bills.Select(b => new
         {
             b.Billid,
             b.Billnumber,
@@ -513,46 +628,31 @@ public class BillController : ControllerBase
             b.Iscomplementary,
             b.Businessdate,
             b.Lifecyclestatus,
-            branch = _context.Branches
-                .Where(i => (int?)i.Branchid == b.Branchid)
-                .Select(i => i.Branchname)
-                .FirstOrDefault(),
-            createdby = _context.Users
-                .Where(p => (int?)p.Userid == b.CreatedBy)
-                .Select(m => m.Username)
-                .FirstOrDefault(),
-            Orders = b.Billdetails.Select(d => new
+            branch = b.Branchid is int bid ? branchNames.GetValueOrDefault(bid) : null,
+            createdby = b.CreatedBy is int uid ? userNames.GetValueOrDefault(uid) : null,
+            Orders = ordersByBill[b.Billid].Select(d => new
             {
                 d.Orderid,
-                d.Order.Ordernumber,
-                d.Order.Timedate,
-                Status = d.Order.Status,
-                d.Order.Totalprice,
-                d.Order.Tableid,
-                d.Order.Waiterid,
-                Customerid = d.Order.Customerid,
-                d.Order.Ordertypeid,
-                OrderType = _context.Ordertypes
-                    .Where(x => (int?)x.Ordertypeid == d.Order.Ordertypeid)
-                    .Select(x => x.Ordertypename)
-                    .FirstOrDefault(),
-                OrderDetails = d.Order.Orderdetails.Select(od => new
+                d.Ordernumber,
+                d.Timedate,
+                Status = d.Status,
+                d.Totalprice,
+                d.Tableid,
+                d.Waiterid,
+                Customerid = d.Customerid,
+                d.Ordertypeid,
+                OrderType = d.Ordertypeid is int tid ? typeNames.GetValueOrDefault(tid) : null,
+                OrderDetails = linesByOrder[d.Orderid].Select(od => new
                 {
                     od.Orderdetailid,
                     od.Itemid,
-                    Name = _context.Items
-                        .Where(i => i.Itemid == od.Itemid)
-                        .Select(i => i.Itemname)
-                        .FirstOrDefault(),
+                    Name = itemNamesById.GetValueOrDefault(od.Itemid),
                     od.Qty,
                     od.Price,
                     od.Sumofprice
                 }).ToList()
             }).ToList()
-        })
-        .OrderByDescending(p => p.Datetime)
-        .ThenByDescending(p => p.Billid)
-        .ToListAsync();
+        }).ToList();
 
         if (!list.Any())
         {
@@ -642,29 +742,31 @@ public class BillController : ControllerBase
             query = query.Where(b => b.Businessdate.HasValue && b.Businessdate.Value.Date <= toDate.Value.Date);
         }
 
-        var billData = await query.Select(b => new
-        {
-            Orders = b.Billdetails.Select(d => new
-            {
-                d.Order.Totalprice,
-                d.Order.Ordertypeid,
-                d.Order.Status,
-                d.Order.ComplimentaryF,
-                OrderTypeName = _context.Ordertypes
-                    .Where(x => (int?)x.Ordertypeid == d.Order.Ordertypeid)
-                    .Select(x => x.Ordertypename)
-                    .FirstOrDefault(),
-                BillAmount = b.Subtotal ?? 0m,
-                Tax = b.Tax ?? 0m
-            }).ToList()
-        }).ToListAsync();
+        // Flat rows (bill x order), in the same order as before (bill id, then bill detail id).
+        var rows = await (from b in query.AsNoTracking()
+                          join d in _context.Billdetails.AsNoTracking() on b.Billid equals d.Billid
+                          join o in _context.Orders.AsNoTracking() on d.Orderid equals o.Orderid
+                          orderby b.Billid, d.Billdetailid
+                          select new
+                          {
+                              o.Totalprice, o.Ordertypeid, o.Status, o.ComplimentaryF,
+                              BillAmount = b.Subtotal ?? 0m,
+                              Tax = b.Tax ?? 0m
+                          })
+            .ToListAsync();
 
-        if (!billData.Any())
+        if (!rows.Any() && !await query.AnyAsync())
         {
             return Ok(new { status = "Success", message = "No bills found", data = (object)null });
         }
 
-        var allOrders = billData.SelectMany(b => b.Orders).ToList();
+        var typeNames = await _context.Ordertypes.AsNoTracking().ToDictionaryAsync(o => o.Ordertypeid, o => o.Ordertypename);
+        var allOrders = rows.Select(r => new
+        {
+            r.Totalprice, r.Ordertypeid, r.Status, r.ComplimentaryF,
+            OrderTypeName = r.Ordertypeid is int tid ? typeNames.GetValueOrDefault(tid) : null,
+            r.BillAmount, r.Tax
+        }).ToList();
 
         var orderTypeWiseTotals = allOrders
             .Where(o => o.Status == "approved")
@@ -975,181 +1077,5 @@ public class BillController : ControllerBase
             .ToListAsync();
 
         return Ok(new { status = "Success", data });
-    }
-
-    // Loads everything the bill needs, then prints it through the print queue (never on the request
-    // thread). Throws when printing failed; a bill still printing after PrinterSettings:WaitSeconds
-    // counts as printed and finishes in the background.
-    private async Task PrintBillAsync(int billId)
-    {
-        var bill = await _context.Billheaders.AsNoTracking()
-            .Include(x => x.Billdetails)
-                .ThenInclude(d => d.Order)
-                    .ThenInclude(o => o.Orderdetails)
-            .FirstOrDefaultAsync(x => x.Billid == billId);
-
-        if (bill == null) return;
-
-        string hotelName = _configuration["RestaurantSettings:HotelName"] ?? "RESTAURANT";
-        string hotelDescription = _configuration["RestaurantSettings:HotelDescription"] ?? "";
-        string cashierName = await _context.Users
-            .Where(u => (int?)u.Userid == bill.CreatedBy)
-            .Select(u => u.Username)
-            .FirstOrDefaultAsync() ?? "Admin";
-
-        // Order type
-        string orderTypeName = await _context.Billdetails
-            .Where(d => d.Billid == bill.Billid)
-            .Select(d => _context.Ordertypes
-                .Where(x => (int?)x.Ordertypeid == d.Order.Ordertypeid)
-                .Select(x => x.Ordertypename)
-                .FirstOrDefault())
-            .FirstOrDefaultAsync() ?? "TAKEAWAY";
-
-        // Items grouped by itemid
-        var billItemIds = bill.Billdetails
-            .SelectMany(d => d.Order?.Orderdetails ?? new List<Orderdetail>())
-            .Select(od => od.Itemid).Distinct().ToList();
-        var itemNames = await _context.Items.AsNoTracking()
-            .Where(i => billItemIds.Contains(i.Itemid))
-            .Select(i => new { i.Itemid, i.Itemname })
-            .ToDictionaryAsync(i => i.Itemid, i => i.Itemname);
-        var items = bill.Billdetails
-            .SelectMany(d => d.Order?.Orderdetails ?? new List<Orderdetail>())
-            .GroupBy(od => od.Itemid)
-            .Select(gp => new
-            {
-                ItemName = itemNames.GetValueOrDefault(gp.Key) ?? "Unknown Item",
-                Price = gp.FirstOrDefault().Price,
-                Qty = gp.Sum(x => x.Qty),
-                SubTotal = gp.Sum(x => x.Sumofprice)
-            })
-            .ToList();
-
-        var job = _printQueue.Enqueue(_configuration["PrinterSettings:BillPrinter"], graphics =>
-        {
-            float y = 10f;
-            float left = 10f;
-            float width = 263f;
-
-            Font headerFont = new Font("Courier New", 12f, FontStyle.Bold);
-            Font normalFont = new Font("Courier New", 9f, FontStyle.Regular);
-            Font boldFont = new Font("Courier New", 9f, FontStyle.Bold);
-
-            var centerFormat = new StringFormat { Alignment = StringAlignment.Center };
-            var rightFormat = new StringFormat { Alignment = StringAlignment.Far };
-
-            // Hotel name
-            graphics.DrawString(hotelName, headerFont, Brushes.Black, new RectangleF(left, y, width, 40f), centerFormat);
-            y += 20f;
-
-            // Hotel description
-            if (!string.IsNullOrEmpty(hotelDescription))
-            {
-                SizeF descSize = graphics.MeasureString(hotelDescription, normalFont, (int)width);
-                graphics.DrawString(hotelDescription, normalFont, Brushes.Black, new RectangleF(left, y, width, descSize.Height), centerFormat);
-                y += descSize.Height + 10f;
-            }
-
-            // Bill number
-            string billNo = bill.Billnumber.Contains("-") ? bill.Billnumber.Split('-').Last() : bill.Billnumber;
-            graphics.DrawString("*** Bill No - " + billNo + " ***", boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
-            y += 15f;
-
-            // Token number
-            graphics.DrawString($"Token No#:{bill.Billid}", boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
-            y += 15f;
-
-            // Order type
-            graphics.DrawString(orderTypeName.ToUpper(), boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
-            y += 15f;
-
-            // Cashier
-            graphics.DrawString("Cashier# " + cashierName, normalFont, Brushes.Black, left, y);
-            y += 15f;
-
-            // Date
-            graphics.DrawString($"Date : {bill.Datetime:dd/MM/yyyy hh:mm tt}", normalFont, Brushes.Black, left, y);
-            y += 20f;
-
-            // Separator
-            string separator = new string('-', 37);
-            graphics.DrawString(separator, normalFont, Brushes.Black, left, y);
-            y += 12f;
-
-            // Column headers
-            graphics.DrawString("ITEM NAME", boldFont, Brushes.Black, left, y);
-            graphics.DrawString("PRICE", boldFont, Brushes.Black, left + 130f, y);
-            graphics.DrawString("QTY", boldFont, Brushes.Black, left + 185f, y);
-            graphics.DrawString("SUB", boldFont, Brushes.Black, left + width, y, rightFormat);
-            y += 15f;
-
-            graphics.DrawString(separator, normalFont, Brushes.Black, left, y);
-            y += 12f;
-
-            // Items grouped by itemid
-            int itemCount = 0;
-            decimal totalQty = 0;
-
-            float nameWidth = 120f;
-            foreach (var item in items)
-            {
-                if (item.Qty > 0)
-                {
-                    SizeF nameSize = graphics.MeasureString(item.ItemName, boldFont, (int)nameWidth);
-                    graphics.DrawString(item.ItemName, boldFont, Brushes.Black, new RectangleF(left, y, nameWidth, nameSize.Height));
-                    graphics.DrawString($"{item.Price:F2}", normalFont, Brushes.Black, left + 130f, y);
-                    graphics.DrawString($"{item.Qty}", normalFont, Brushes.Black, left + 185f, y);
-                    graphics.DrawString($"{item.SubTotal:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
-                    y += nameSize.Height + 3f;
-                    itemCount++;
-                    totalQty += (decimal)item.Qty;
-                }
-            }
-
-            // Totals
-            graphics.DrawString(separator, normalFont, Brushes.Black, left, y);
-            y += 12f;
-
-            graphics.DrawString("Sub Total RS", normalFont, Brushes.Black, left + 60f, y);
-            graphics.DrawString($"{bill.Subtotal:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
-            y += 15f;
-
-            decimal taxRate = 2.500m;
-            decimal halfTax = bill.Tax.GetValueOrDefault() / 2m;
-            graphics.DrawString($"CGST:{taxRate:F3}%", normalFont, Brushes.Black, left + 60f, y);
-            graphics.DrawString($"{halfTax:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
-            y += 15f;
-
-            graphics.DrawString($"SGST:{taxRate:F3}%", normalFont, Brushes.Black, left + 60f, y);
-            graphics.DrawString($"{halfTax:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
-            y += 15f;
-
-            decimal subtotalPlusTax = bill.Subtotal.GetValueOrDefault() + bill.Tax.GetValueOrDefault();
-            decimal total = bill.Totalamount ?? decimal.Round(subtotalPlusTax, 0);
-            decimal roundOff = total - subtotalPlusTax;
-            graphics.DrawString("Round Off", normalFont, Brushes.Black, left + 60f, y);
-            graphics.DrawString($"{roundOff:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
-            y += 15f;
-
-            graphics.DrawString(separator, normalFont, Brushes.Black, left, y);
-            y += 12f;
-
-            graphics.DrawString("Total RS", headerFont, Brushes.Black, left + 40f, y);
-            graphics.DrawString($"{total:F2}", headerFont, Brushes.Black, left + width, y, rightFormat);
-            y += 25f;
-
-            graphics.DrawString($"Total Items - {itemCount}, Qty - {totalQty:G0}", normalFont, Brushes.Black, left, y);
-            y += 15f;
-
-            graphics.DrawString("Settlement Type : " + bill.Paymentmode, normalFont, Brushes.Black, left, y);
-            y += 20f;
-
-            graphics.DrawString(separator, normalFont, Brushes.Black, left, y);
-        });
-
-        string? outcome = (await _printQueue.WaitAsync(new[] { job }))[0];
-        if (!string.IsNullOrEmpty(outcome))
-            throw new Exception(outcome);
     }
 }

@@ -1072,6 +1072,57 @@ private branchDirectory$:any;
     return this.http.get(AppSettings.apiUrl + 'Waitlist' + this.branchQuery(branchId));
   }
 
+  // Bill amounts of the orders on the order screen, calculated by the API.
+  calculateBill(input: { orderTypeId: number | null, orderIds: number[], newLines: { itemId: number, qty: number }[], discountId: number | null, customDiscount: number | null }): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Bill/Calculate', input);
+  }
+
+  // ---- Customer loyalty (earn + view), owner report, expenses & cash
+
+  getLoyaltySummary(fromDate: string, toDate: string, branchId?: number | null): Observable<any> {
+    const params: any = { fromDate, toDate };
+    if (branchId) params.branchId = branchId;
+    return this.http.get(AppSettings.apiUrl + 'Loyalty/Summary', { params });
+  }
+
+  getLoyaltyCustomer(customerId: number, branchId?: number | null): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'Loyalty/Customer/' + customerId + this.branchQuery(branchId));
+  }
+
+  // Sales report of the period to the owner's WhatsApp (numbers in appsettings).
+  sendOwnerReport(fromDate: string, toDate: string, branchId?: number | null): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'OwnerReport/Send', { fromDate, toDate, branchId: branchId || null });
+  }
+
+  getCashDay(date: string, branchId?: number | null): Observable<any> {
+    const params: any = { date };
+    if (branchId) params.branchId = branchId;
+    return this.http.get(AppSettings.apiUrl + 'Cash/Day', { params });
+  }
+
+  saveCashDay(input: { date: string, branchId?: number | null, openingCash: number, countedCash: number | null, notes: string | null }): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Cash/Day', input);
+  }
+
+  addCashEntry(input: { date: string, branchId?: number | null, entryType: string, category: string | null, amount: number, paymentMode: string, notes: string | null }): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Cash/Entry', input);
+  }
+
+  deleteCashEntry(id: number): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Cash/Entry/' + id + '/Delete', null);
+  }
+
+  getCashReport(fromDate: string, toDate: string, branchId?: number | null): Observable<any> {
+    const params: any = { fromDate, toDate };
+    if (branchId) params.branchId = branchId;
+    return this.http.get(AppSettings.apiUrl + 'Cash/Report', { params });
+  }
+
+  // TV calling display: Called tokens with their tables (no contact details).
+  getWaitlistDisplay(branchId?: number | null): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'Waitlist/Display' + this.branchQuery(branchId));
+  }
+
   createWaitlistToken(input: { customerName: string, mobile: string, email?: string | null, guests: number, notes?: string | null, branchId?: number | null }): Observable<any> {
     return this.http.post(AppSettings.apiUrl + 'Waitlist', input);
   }
@@ -1173,6 +1224,23 @@ private branchDirectory$:any;
   // The caller's own branch customers, always fresh (not the cached list).
   getBranchCustomers(): Observable<any> {
     return this.http.get(AppSettings.apiUrl + 'Customers');
+  }
+
+  // Existing customers of the caller's branch with this phone number (always fresh).
+  getCustomersByPhone(phone: string): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'Customers/ByPhone', { params: { phone } });
+  }
+
+  // Token booking: stored name of an existing customer with this mobile (data = null when unknown).
+  getKnownCustomer(mobile: string, branchId?: number | null): Observable<any> {
+    const params: any = { mobile };
+    if (branchId) params.branchId = branchId;
+    return this.http.get(AppSettings.apiUrl + 'Waitlist/KnownCustomer', { params });
+  }
+
+  // Waitlist token seated at the table (data = null when none), with customers matching its mobile.
+  getSeatedGuest(tableId: any): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'Tables/' + tableId + '/SeatedGuest');
   }
 
   // After a customer is added elsewhere, the cached list must be re-read.

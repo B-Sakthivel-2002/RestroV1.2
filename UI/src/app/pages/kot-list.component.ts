@@ -1,13 +1,14 @@
-import { ChangeDetectorRef, Component, Input, input, TemplateRef } from '@angular/core';
+import { ChangeDetectorRef, Component, Input, input, OnDestroy, TemplateRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { QueryService } from '@appservices/query.service';
 import { FormsModule } from '@angular/forms';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
-import { debounceTime, finalize, Observable } from 'rxjs';
+import { debounceTime, finalize, merge, Observable, Subscription } from 'rxjs';
 import { AlertService } from '@appservices/alert.service';
 import { StateService } from '@appservices/state.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { KotSignalrService } from '@appservices/kot-signalr.service';
+import { LiveHubService } from '@appservices/live-hub.service';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 @Component({
@@ -270,7 +271,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
    `,
    styles: ``
 })
-export class KotListComponent {
+export class KotListComponent implements OnDestroy {
 orderList:Array<any>=[];
 
   inputFromDate: string ='';
@@ -317,9 +318,20 @@ orderList:Array<any>=[];
     // this.signalR.onOrderUpdated((orderId:number) => {
     // //  this.getOrderReport();  
     // });
+
+    // Live: new KOT, edit, cancel, ready / picked up (from any device) reload the list. No polling.
+    this.liveSub = merge(this.hub.on('OrderUpdated'), this.hub.on('OrderAlert'), this.hub.resync$)
+      .pipe(debounceTime(600))
+      .subscribe(() => this.getOrderReport(true));
   }
 
-  constructor(private route:ActivatedRoute,private stateService: StateService ,private changeDetectRef: ChangeDetectorRef,private alertService:AlertService,private query:QueryService,private modalService:BsModalService, private signalR: KotSignalrService){}
+  private liveSub?: Subscription;
+
+  ngOnDestroy(): void {
+    this.liveSub?.unsubscribe();
+  }
+
+  constructor(private route:ActivatedRoute,private stateService: StateService ,private changeDetectRef: ChangeDetectorRef,private alertService:AlertService,private query:QueryService,private modalService:BsModalService, private signalR: KotSignalrService, private hub: LiveHubService){}
 
   formatDate(date: Date): string {
   const year = date.getFullYear();
@@ -510,9 +522,10 @@ getAllReport(status:string){
   
 }
 
-  getOrderReport(){
-    
-   this.stateService.setLoadingState(true);
+  // silent: a live reload (SignalR), without the full-screen loader.
+  getOrderReport(silent: boolean = false){
+
+   if (!silent) this.stateService.setLoadingState(true);
 
     
     let convertFromDate = this.inputFromDate;

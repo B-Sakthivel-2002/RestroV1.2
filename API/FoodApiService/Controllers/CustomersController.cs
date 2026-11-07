@@ -42,6 +42,14 @@ public class CustomersController : ControllerBase
         return Ok(new { status = "Success", message = "Customers fetched successfully", data = list });
     }
 
+    // Existing customers of the caller's branch with this phone number (order screen check).
+    [HttpGet("ByPhone")]
+    public async Task<IActionResult> GetByPhone([FromQuery] string? phone)
+    {
+        var list = await PhoneMatch.FindAsync(await Visible(false), phone);
+        return Ok(new { status = "Success", message = $"{list.Count} customer(s) found", data = list });
+    }
+
     [HttpGet("{id}")]
     public async Task<IActionResult> GetCustomer(int id)
     {

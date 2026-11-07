@@ -6,6 +6,9 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { QueryService } from '@appservices/query.service';
 import { AlertService } from '@appservices/alert.service';
 import { AuthService } from '@appservices/auth.service';
+import { LiveHubService } from '@appservices/live-hub.service';
+import { WaitlistSignalrService } from '@appservices/waitlist-signalr.service';
+import { Subscription, debounceTime, filter, merge } from 'rxjs';
 import { BranchSelectComponent } from '../shared/component/branch-select.component';
 
 // Captain's live screen: Queue / Tables / History tabs over all floors of the branch.
@@ -297,7 +300,11 @@ import { BranchSelectComponent } from '../shared/component/branch-select.compone
 })
 export class WaitlistComponent implements OnInit, OnDestroy {
 
-  private readonly refreshMs = 8000;
+  // Live over SignalR (no polling): reloads when a token, table, order or bill changes.
+  // A local tick (no server call) keeps the minute counters current in between.
+  private readonly tickMs = 30000;
+  private live?: Subscription;
+  private clockOffsetMs = 0;
 
   isOwner = false;
   branchId: number | null = Number(localStorage.getItem('branchid')) || null;
@@ -323,18 +330,36 @@ export class WaitlistComponent implements OnInit, OnDestroy {
   private timer: any;
   private busy = false;
 
-  constructor(private query: QueryService, private alertService: AlertService, private modalService: BsModalService, auth: AuthService) {
+  constructor(private query: QueryService, private alertService: AlertService, private modalService: BsModalService, auth: AuthService,
+              private waitlistHub: WaitlistSignalrService, private hub: LiveHubService) {
     this.isOwner = auth.isOutletOwner();
   }
 
   ngOnInit(): void {
     this.refresh();
-    this.timer = setInterval(() => this.refresh(), this.refreshMs);
+    this.live = merge(
+      this.waitlistHub.events$.pipe(filter(e => e.kind === 'resync' || (e.kind === 'changed' && (e.branchId == null || e.branchId === this.summary?.branchId)))),
+      this.hub.on('OrderUpdated'),
+      this.hub.on('OrderSettled'),
+      this.hub.on('TableStatus')
+    ).pipe(debounceTime(400)).subscribe(() => this.refresh());
+    this.timer = setInterval(() => this.tick(), this.tickMs);
   }
 
   ngOnDestroy(): void {
     clearInterval(this.timer);
+    this.live?.unsubscribe();
     this.modalRef?.hide();
+  }
+
+  // Same rules as the API (WaitlistController.GetQueue), on the server's clock.
+  private tick(): void {
+    const now = Date.now() + this.clockOffsetMs;
+    const hold = (this.summary?.holdMinutes ?? 0) * 60000;
+    for (const t of this.activeTokens) {
+      t.waitingMinutes = Math.floor((now - new Date(t.createdat).getTime()) / 60000);
+      t.holdOverdue = t.status === 'Called' && !!t.calledat && hold > 0 && now - new Date(t.calledat).getTime() > hold;
+    }
   }
 
   refresh(): void {
@@ -355,6 +380,9 @@ export class WaitlistComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         this.tokens = res.data || [];
         this.summary = res.summary;
+        if (res.summary?.serverTime) {
+          this.clockOffsetMs = new Date(res.summary.serverTime).getTime() - Date.now();
+        }
         this.activeTokens = this.tokens.filter(t => t.status === 'Waiting' || t.status === 'Called');
         this.closedTokens = this.tokens.filter(t => t.status !== 'Waiting' && t.status !== 'Called').reverse();
         // Forget picks for tokens that are gone.

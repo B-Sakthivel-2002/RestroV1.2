@@ -31,6 +31,10 @@ public class HotelContext : DbContext
     public virtual DbSet<User> Users { get; set; }
     public virtual DbSet<Userrole> Userroles { get; set; }
     public virtual DbSet<WaitlistToken> WaitlistTokens { get; set; }
+
+    public virtual DbSet<CashDay> CashDays { get; set; }
+
+    public virtual DbSet<CashEntry> CashEntries { get; set; }
     public virtual DbSet<Waiter> Waiters { get; set; }
     public virtual DbSet<Workperiod> Workperiods { get; set; }
 
@@ -301,6 +305,7 @@ public class HotelContext : DbContext
             entity.Property(e => e.Sumofprice).HasColumnName("sumofprice");
             entity.HasOne(d => d.Order).WithMany(p => p.Orderdetails).HasForeignKey(d => d.Orderid).HasConstraintName("fk_order");
             entity.Property(e => e.KOTStatus).HasMaxLength(100).HasColumnName("KOTStatus").IsRequired(false);
+            entity.Property(e => e.Kotstatusat).HasColumnType("timestamp without time zone").HasColumnName("kotstatusat");
             entity.Property(e => e.Branchid).HasColumnName("branchid");
             entity.Property(e => e.Outletid).HasColumnName("outletid");
         });
@@ -476,6 +481,38 @@ public class HotelContext : DbContext
             entity.Property(e => e.Branchid).HasColumnName("branchid");
             entity.Property(e => e.Outletid).HasColumnName("outletid");
             entity.HasOne(d => d.Table).WithMany().HasForeignKey(d => d.Tableid).OnDelete(DeleteBehavior.SetNull).HasConstraintName("fk_waitlist_token_table");
+        });
+
+        modelBuilder.Entity<CashDay>(entity =>
+        {
+            entity.HasKey(e => e.Cashdayid).HasName("cash_day_pkey");
+            entity.ToTable("cash_day");
+            entity.Property(e => e.Cashdayid).HasColumnName("cashdayid");
+            entity.Property(e => e.Bizdate).HasColumnName("bizdate");
+            entity.Property(e => e.Openingcash).HasPrecision(12, 2).HasColumnName("openingcash");
+            entity.Property(e => e.Countedcash).HasPrecision(12, 2).HasColumnName("countedcash");
+            entity.Property(e => e.Notes).HasColumnName("notes");
+            entity.Property(e => e.Updatedby).HasColumnName("updatedby");
+            entity.Property(e => e.Updatedat).HasColumnType("timestamp without time zone").HasColumnName("updatedat");
+            entity.Property(e => e.Branchid).HasColumnName("branchid");
+            entity.Property(e => e.Outletid).HasColumnName("outletid");
+        });
+
+        modelBuilder.Entity<CashEntry>(entity =>
+        {
+            entity.HasKey(e => e.Cashentryid).HasName("cash_entry_pkey");
+            entity.ToTable("cash_entry");
+            entity.Property(e => e.Cashentryid).HasColumnName("cashentryid");
+            entity.Property(e => e.Bizdate).HasColumnName("bizdate");
+            entity.Property(e => e.Entrytype).HasMaxLength(20).HasColumnName("entrytype");
+            entity.Property(e => e.Category).HasMaxLength(60).HasColumnName("category");
+            entity.Property(e => e.Amount).HasPrecision(12, 2).HasColumnName("amount");
+            entity.Property(e => e.Paymentmode).HasMaxLength(20).HasColumnName("paymentmode");
+            entity.Property(e => e.Notes).HasColumnName("notes");
+            entity.Property(e => e.Createdby).HasColumnName("createdby");
+            entity.Property(e => e.Createdat).HasColumnType("timestamp without time zone").HasColumnName("createdat");
+            entity.Property(e => e.Branchid).HasColumnName("branchid");
+            entity.Property(e => e.Outletid).HasColumnName("outletid");
         });
 
         modelBuilder.Entity<TableHistory>(entity =>

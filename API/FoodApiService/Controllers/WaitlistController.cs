@@ -38,14 +38,17 @@ public class WaitlistController : ControllerBase
     private readonly DocumentNumberService _numbers;
     private readonly EmailService _email;
 
-    public WaitlistController(HotelContext context, ITenantContext tenant, SeatingService seating, DocumentNumberService numbers, EmailService email)
+    public WaitlistController(HotelContext context, ITenantContext tenant, SeatingService seating, DocumentNumberService numbers, EmailService email, WhatsAppService whatsApp)
     {
         _context = context;
         _tenant = tenant;
         _seating = seating;
         _numbers = numbers;
         _email = email;
+        _whatsApp = whatsApp;
     }
+
+    private readonly WhatsAppService _whatsApp;
 
     private static DateOnly Today => DateOnly.FromDateTime(DateHelper.GetBusinessDate(DateTime.Now));
 
@@ -109,9 +112,59 @@ public class WaitlistController : ControllerBase
                 called = list.Count(t => t.Status == TokenStatus.Called),
                 seatedToday = list.Count(t => t.Status == TokenStatus.Seated),
                 autoAssign = _seating.Settings.AutoAssign,
-                emailEnabled = _email.IsConfigured
+                emailEnabled = _email.IsConfigured,
+                // The screen keeps "waiting N min" / "not arrived" current between updates with these.
+                holdMinutes = _seating.Settings.HoldMinutes,
+                serverTime = now
             }
         });
+    }
+
+    // TV calling display: Called tokens only (a table is held for them), oldest call first.
+    // A token drops off once it is seated (table occupied), cancelled or marked no-show.
+    // No mobile / email here, the screen is public.
+    [HttpGet("Display")]
+    public async Task<IActionResult> GetDisplay([FromQuery] int? branchId = null)
+    {
+        var tenant = await _tenant.GetAsync();
+        int branch = tenant.ResolveBranch(branchId);
+        var since = Today.AddDays(-1);
+
+        var called = await _context.WaitlistTokens.AsNoTracking()
+            .Where(t => t.Branchid == branch && t.Bizdate >= since && t.Status == TokenStatus.Called)
+            .OrderBy(t => t.Calledat).ThenBy(t => t.Tokenid)
+            .Select(t => new
+            {
+                t.Tokenid, t.Tokencode, t.Customername, t.Guests, t.Calledat,
+                t.Tableid,
+                Tablename = t.Table != null ? t.Table.Tablename : null,
+                Floorname = t.Table != null ? _context.Floors.Where(f => f.Floorid == t.Table.Floorid).Select(f => f.Floorname).FirstOrDefault() : null,
+                Combinedtables = _context.Tables
+                    .Where(m => m.Mergedinto != null && m.Mergedinto == t.Tableid)
+                    .OrderBy(m => m.Tablename).Select(m => m.Tablename).ToList()
+            })
+            .ToListAsync();
+
+        int waiting = await ActiveTokens(branch).CountAsync(t => t.Status == TokenStatus.Waiting);
+        return Ok(new
+        {
+            status = "Success",
+            message = "Calling display fetched successfully",
+            data = called,
+            summary = new { branchId = branch, branchName = await _seating.BranchNameAsync(branch), waiting, serverTime = DateTime.Now }
+        });
+    }
+
+    // Token booking form: the stored name of an existing customer with this mobile (branch-scoped).
+    // Returns only the name, since the booking screen faces the public. data = null when unknown.
+    [HttpGet("KnownCustomer")]
+    public async Task<IActionResult> KnownCustomer([FromQuery] string? mobile, [FromQuery] int? branchId = null)
+    {
+        var tenant = await _tenant.GetAsync();
+        int branch = tenant.ResolveBranch(branchId);
+        var known = (await PhoneMatch.FindAsync(_context.Customers.Where(c => c.Branchid == branch), mobile))
+            .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.Name));
+        return Ok(new { status = "Success", data = known == null ? null : new { name = known.Name!.Trim() } });
     }
 
     [HttpPost]
@@ -134,6 +187,11 @@ public class WaitlistController : ControllerBase
         int branch = tenant.ResolveBranch(request.BranchId);
         if (branch <= 0)
             return BadRequest(new { status = "Error", message = "Your user has no branch" });
+
+        // A number already in the customer master keeps its stored name (phone = customer).
+        var known = (await PhoneMatch.FindAsync(_context.Customers.Where(c => c.Branchid == branch), mobile)).FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(known?.Name))
+            name = known.Name.Trim();
 
         // One active token per mobile number in a branch.
         var existing = await ActiveTokens(branch).AsNoTracking().FirstOrDefaultAsync(t => t.Mobile == mobile);
@@ -162,7 +220,9 @@ public class WaitlistController : ControllerBase
         int ahead = await ActiveTokens(branch).CountAsync(t => t.Status == TokenStatus.Waiting && t.Createdat < token.Createdat);
         int suitableTables = await _context.Tables.CountAsync(t => t.Branchid == branch && t.Status == true && t.Tablestate != TableStates.Blocked);
         int estimate = Estimate(ahead, suitableTables);
-        _email.SendTokenCreated(token, await _seating.BranchNameAsync(branch), ahead, estimate);
+        string branchName = await _seating.BranchNameAsync(branch);
+        _email.SendTokenCreated(token, branchName, ahead, estimate);
+        _whatsApp.SendTokenBooked(token.Mobile, token.Customername, branchName, token.Tokencode, ahead, estimate);
 
         await _seating.AutoAssignAsync(branch, tenant.UserId);
         await _seating.NotifyAsync(branch);

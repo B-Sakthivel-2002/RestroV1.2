@@ -55,28 +55,39 @@ public class TablesController : ControllerBase
         var tenant = await _tenant.GetAsync();
         int branchid = tenant.BranchId;
 
-        var list = await _context.Tables.Where(t => t.Branchid == branchid && t.Status == true).Select(t => new
+        // Same result as before, in a few set-based queries instead of ~7 sub-queries per table.
+        var tables = await _context.Tables.AsNoTracking().Where(t => t.Branchid == branchid && t.Status == true)
+            .Select(t => new { t.Tableid, t.Floorid, t.Tablename, t.Description, t.Status, t.Capacity, t.Mergedinto, t.Tablestate })
+            .ToListAsync();
+        var live = await LiveAsync(tables.Select(t => (t.Tableid, t.Mergedinto, t.Tablestate)).ToList());
+
+        var list = tables.Select(t =>
         {
-            Tableid = t.Tableid,
-            Floorid = t.Floorid,
-            Tablename = t.Tablename,
-            Description = t.Description,
-            Status = t.Status,
-            Capacity = t.Capacity,
-            // Merged tables open the main table's orders.
-            Mergedinto = t.Mergedinto,
-            Mergedintoname = _context.Tables.Where(m => m.Tableid == t.Mergedinto).Select(m => m.Tablename).FirstOrDefault(),
-            OrderTotalAmount = _context.Orders.Where(o => o.Tableid == t.Tableid && (o.Status == "submitted" || o.Status == "printed")).Sum(o => o.Totalprice) ?? 0m,
-            // Open orders first: an order moved in from another table may be older than the table's last settled order.
-            OrderStatus = _context.Orders.Where(o => o.Tableid == t.Tableid).OrderByDescending(o => o.Status == "submitted" || o.Status == "printed").ThenByDescending(o => o.Timedate).Select(o => o.Status).FirstOrDefault(),
-            PrintStatus = _context.Orders.Where(o => o.Tableid == t.Tableid).OrderByDescending(o => o.Status == "submitted" || o.Status == "printed").ThenByDescending(o => o.Timedate).Select(o => o.PrintedF).FirstOrDefault(),
-            StoredState = t.Tablestate,
-            OpenOrders = _context.Orders.Count(o => o.Tableid == t.Tableid && (o.Status == "submitted" || o.Status == "printed")),
-            HeldToken = _context.WaitlistTokens.Where(w => w.Tableid == t.Tableid && w.Status == TokenStatus.Called).Select(w => w.Tokencode).FirstOrDefault(),
-            SeatedToken = _context.WaitlistTokens
-                .Where(w => w.Tableid == t.Tableid && w.Status == TokenStatus.Seated && t.Tablestate == TableStates.Occupied)
-                .OrderByDescending(w => w.Seatedat).Select(w => w.Tokencode).FirstOrDefault()
-        }).ToListAsync();
+            var open = live.Open.GetValueOrDefault(t.Tableid);
+            var top = live.TopOrder.GetValueOrDefault(t.Tableid);
+            var seated = live.Seated.GetValueOrDefault(t.Tableid);
+            return new
+            {
+                Tableid = t.Tableid,
+                Floorid = t.Floorid,
+                Tablename = t.Tablename,
+                Description = t.Description,
+                Status = t.Status,
+                Capacity = t.Capacity,
+                // Merged tables open the main table's orders.
+                Mergedinto = t.Mergedinto,
+                Mergedintoname = t.Mergedinto is int m ? live.Names.GetValueOrDefault(m) : null,
+                OrderTotalAmount = open?.Amount ?? 0m,
+                // Open orders first: an order moved in from another table may be older than the table's last settled order.
+                OrderStatus = top?.Status,
+                PrintStatus = top?.PrintedF,
+                StoredState = t.Tablestate,
+                OpenOrders = open?.Count ?? 0,
+                HeldToken = live.Held.GetValueOrDefault(t.Tableid)?.Tokencode,
+                SeatedToken = seated?.Tokencode,
+                SeatedName = seated?.Customername
+            };
+        }).ToList();
 
         if (list == null || !list.Any())
             return Ok(new { status = "Error", message = "No tables found", data = (object)null });
@@ -87,10 +98,42 @@ public class TablesController : ControllerBase
             t.Tableid, t.Floorid, t.Tablename, t.Description, t.Status, t.Capacity, t.Mergedinto, t.Mergedintoname,
             t.OrderTotalAmount, t.OrderStatus, t.PrintStatus,
             Tablestate = t.OpenOrders > 0 ? TableStates.Occupied : t.HeldToken != null ? TableStates.Reserved : t.StoredState,
-            Tokencode = t.HeldToken ?? t.SeatedToken
+            Tokencode = t.HeldToken ?? t.SeatedToken,
+            t.SeatedToken, t.SeatedName
         }).ToList();
 
         return Ok(new { status = "Success", message = "Tables fetched successfully", data });
+    }
+
+    // The token seated at this table (a merged table resolves to its main table), with the
+    // existing customers that have the token's mobile number. data = null when none is seated.
+    [HttpGet("{id}/SeatedGuest")]
+    public async Task<IActionResult> GetSeatedGuest(int id)
+    {
+        var tenant = await _tenant.GetAsync();
+        int tableId = (await _seating.ResolveTableIdAsync(id)).GetValueOrDefault();
+        var table = await _context.Tables.AsNoTracking().ForBranch(tenant).FirstOrDefaultAsync(t => t.Tableid == tableId);
+        if (table == null)
+            return NotFound(new { status = "Error", message = "Table not found", data = (object)null });
+
+        var token = table.Tablestate != TableStates.Occupied ? null : await _context.WaitlistTokens.AsNoTracking()
+            .Where(w => w.Tableid == tableId && w.Status == TokenStatus.Seated)
+            .OrderByDescending(w => w.Seatedat)
+            .FirstOrDefaultAsync();
+        if (token == null)
+            return Ok(new { status = "Success", message = "No token seated at this table", data = (object)null });
+
+        var customers = await PhoneMatch.FindAsync(_context.Customers.ForBranch(tenant), token.Mobile);
+        return Ok(new
+        {
+            status = "Success",
+            message = "Seated guest fetched successfully",
+            data = new
+            {
+                token.Tokenid, token.Tokencode, token.Customername, token.Mobile, token.Email, token.Guests, token.Seatedat,
+                customers
+            }
+        });
     }
 
     [HttpGet("{id}")]
@@ -160,6 +203,71 @@ public class TablesController : ControllerBase
         return Ok(new { status = "Success", message = "Table deleted successfully", data = table });
     }
 
+    private record OpenInfo(int Count, decimal Amount, DateTime? FirstAt);
+    private record TopOrderInfo(string? Status, bool? PrintedF);
+
+    private class LiveInfo
+    {
+        public Dictionary<int, OpenInfo> Open { get; init; } = new();
+        public Dictionary<int, TopOrderInfo> TopOrder { get; init; } = new();
+        public Dictionary<int, WaitlistToken> Held { get; init; } = new();
+        public Dictionary<int, WaitlistToken> Seated { get; init; } = new();
+        public Dictionary<int, string?> Names { get; init; } = new();
+        public Dictionary<int, List<string?>> MergedTables { get; init; } = new();
+    }
+
+    // Open orders, latest order, held / seated token and merge names of the given tables, in one pass each.
+    private async Task<LiveInfo> LiveAsync(List<(int Tableid, int? Mergedinto, string Tablestate)> tables)
+    {
+        var ids = tables.Select(t => t.Tableid).ToList();
+        var nullableIds = ids.Select(i => (int?)i).ToList();
+
+        var openRows = await _context.Orders.AsNoTracking()
+            .Where(o => nullableIds.Contains(o.Tableid) && (o.Status == "submitted" || o.Status == "printed"))
+            .Select(o => new { o.Tableid, o.Totalprice, o.Timedate })
+            .ToListAsync();
+        var open = openRows.GroupBy(o => o.Tableid!.Value).ToDictionary(g => g.Key, g => new OpenInfo(
+            g.Count(),
+            // SQL SUM skips nulls: same here.
+            g.Where(o => o.Totalprice.HasValue).Aggregate(0m, (s, o) => s + o.Totalprice!.Value),
+            g.Min(o => (DateTime?)o.Timedate)));
+
+        // Latest order per table, open orders first (ROW_NUMBER in the database, one scan).
+        var top = await _context.Orders.AsNoTracking()
+            .Where(o => nullableIds.Contains(o.Tableid))
+            .GroupBy(o => o.Tableid)
+            .Select(g => g.OrderByDescending(o => o.Status == "submitted" || o.Status == "printed").ThenByDescending(o => o.Timedate)
+                .Select(o => new { o.Tableid, o.Status, o.PrintedF }).First())
+            .ToListAsync();
+
+        var held = await _context.WaitlistTokens.AsNoTracking()
+            .Where(w => nullableIds.Contains(w.Tableid) && w.Status == TokenStatus.Called)
+            .ToListAsync();
+        // Seated tokens count only while the table is occupied.
+        var occupied = tables.Where(t => t.Tablestate == TableStates.Occupied).Select(t => (int?)t.Tableid).ToList();
+        var seated = occupied.Count == 0 ? new List<WaitlistToken>() : await _context.WaitlistTokens.AsNoTracking()
+            .Where(w => occupied.Contains(w.Tableid) && w.Status == TokenStatus.Seated)
+            .ToListAsync();
+
+        var mergeTargets = tables.Where(t => t.Mergedinto != null).Select(t => t.Mergedinto!.Value).Distinct().ToList();
+        var names = mergeTargets.Count == 0 ? new Dictionary<int, string?>() : await _context.Tables.AsNoTracking()
+            .Where(t => mergeTargets.Contains(t.Tableid)).ToDictionaryAsync(t => t.Tableid, t => t.Tablename);
+        var merged = await _context.Tables.AsNoTracking()
+            .Where(m => m.Mergedinto != null && nullableIds.Contains(m.Mergedinto))
+            .Select(m => new { m.Mergedinto, m.Tablename })
+            .ToListAsync();
+
+        return new LiveInfo
+        {
+            Open = open,
+            TopOrder = top.ToDictionary(o => o.Tableid!.Value, o => new TopOrderInfo(o.Status, o.PrintedF)),
+            Held = held.GroupBy(w => w.Tableid!.Value).ToDictionary(g => g.Key, g => g.First()),
+            Seated = seated.GroupBy(w => w.Tableid!.Value).ToDictionary(g => g.Key, g => g.OrderByDescending(w => w.Seatedat).First()),
+            Names = names,
+            MergedTables = merged.GroupBy(m => m.Mergedinto!.Value).ToDictionary(g => g.Key, g => g.Select(m => m.Tablename).ToList())
+        };
+    }
+
     // Captain's live table board for one branch: effective state, held / seated token, open bill.
     [HttpGet("Board")]
     public async Task<IActionResult> GetBoard([FromQuery] int? branchId = null)
@@ -173,28 +281,31 @@ public class TablesController : ControllerBase
             .Select(f => new { f.Floorid, f.Floorname })
             .ToListAsync();
 
-        var tables = await _context.Tables.AsNoTracking()
+        // Same result as before, in a few set-based queries instead of ~7 sub-queries per table.
+        var rows = await _context.Tables.AsNoTracking()
             .Where(t => t.Branchid == branch && t.Status == true)
             .OrderBy(t => t.Floorid).ThenBy(t => t.Tablename)
-            .Select(t => new
+            .Select(t => new { t.Tableid, t.Floorid, t.Tablename, t.Capacity, t.Tablestate, t.Statesince, t.Mergedinto })
+            .ToListAsync();
+        var live = await LiveAsync(rows.Select(t => (t.Tableid, t.Mergedinto, t.Tablestate)).ToList());
+
+        var tables = rows.Select(t =>
+        {
+            var open = live.Open.GetValueOrDefault(t.Tableid);
+            var held = live.Held.GetValueOrDefault(t.Tableid);
+            var seated = live.Seated.GetValueOrDefault(t.Tableid);
+            return new
             {
                 t.Tableid, t.Floorid, t.Tablename, t.Capacity, t.Tablestate, t.Statesince, t.Mergedinto,
-                Mergedintoname = _context.Tables.Where(m => m.Tableid == t.Mergedinto).Select(m => m.Tablename).FirstOrDefault(),
-                Mergedtables = _context.Tables.Where(m => m.Mergedinto == t.Tableid).Select(m => m.Tablename).ToList(),
-                OpenOrders = _context.Orders.Count(o => o.Tableid == t.Tableid && (o.Status == "submitted" || o.Status == "printed")),
-                OpenAmount = _context.Orders.Where(o => o.Tableid == t.Tableid && (o.Status == "submitted" || o.Status == "printed")).Sum(o => o.Totalprice) ?? 0m,
-                FirstOrderAt = _context.Orders.Where(o => o.Tableid == t.Tableid && (o.Status == "submitted" || o.Status == "printed")).Min(o => (DateTime?)o.Timedate),
-                Held = _context.WaitlistTokens
-                    .Where(w => w.Tableid == t.Tableid && w.Status == TokenStatus.Called)
-                    .Select(w => new { w.Tokenid, w.Tokencode, w.Customername, w.Guests, w.Calledat, w.Assignmode })
-                    .FirstOrDefault(),
-                Seated = _context.WaitlistTokens
-                    .Where(w => w.Tableid == t.Tableid && w.Status == TokenStatus.Seated && t.Tablestate == TableStates.Occupied)
-                    .OrderByDescending(w => w.Seatedat)
-                    .Select(w => new { w.Tokenid, w.Tokencode, w.Customername, w.Guests, w.Seatedat })
-                    .FirstOrDefault()
-            })
-            .ToListAsync();
+                Mergedintoname = t.Mergedinto is int m ? live.Names.GetValueOrDefault(m) : null,
+                Mergedtables = live.MergedTables.GetValueOrDefault(t.Tableid) ?? new List<string?>(),
+                OpenOrders = open?.Count ?? 0,
+                OpenAmount = open?.Amount ?? 0m,
+                FirstOrderAt = open?.FirstAt,
+                Held = held == null ? null : new { held.Tokenid, held.Tokencode, held.Customername, held.Guests, held.Calledat, held.Assignmode },
+                Seated = seated == null ? null : new { seated.Tokenid, seated.Tokencode, seated.Customername, seated.Guests, seated.Seatedat }
+            };
+        }).ToList();
 
         var board = tables.Select(t => new
         {

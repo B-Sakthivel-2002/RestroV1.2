@@ -20,6 +20,7 @@ import {
   of,
   finalize,
   firstValueFrom,
+  catchError,
 } from 'rxjs';
 import { TableActionMode, TableActionsComponent } from '../shared/component/table-actions.component';
 import { ChangeDetectorRef } from '@angular/core';
@@ -203,6 +204,8 @@ export interface IShortBillForReport {
                         [typeaheadMinLength]="3"
                         [typeaheadWaitMs]="200"
                         (typeaheadOnSelect)="onCustomerSelect($event)"
+                        [disabled]="selectedcustomerid > 0"
+                        [title]="selectedcustomerid > 0 ? 'Existing customer - change the phone number to enter another customer' : ''"
                         placeholder="Search customer..."
                       />
                     </div>
@@ -213,11 +216,31 @@ export interface IShortBillForReport {
                       <input
                         type="text"
                         class="form-control"
+                        inputmode="tel"
+                        maxlength="20"
                         [(ngModel)]="selectedcustomerphoneno"
+                        (ngModelChange)="onPhoneChange($event)"
                       />
                     </div>
                   </div>
                 </div>
+
+                @if (phoneMatches.length > 1) {
+                  <div class="row">
+                    <div class="col-12">
+                      <div class="form-group">
+                        <h4 class="sb-tt">Existing customers with this number</h4>
+                        <div class="list-group">
+                          @for (c of phoneMatches; track c.customerid) {
+                            <button type="button" class="list-group-item list-group-item-action py-1" (click)="applyCustomer(c)">
+                              {{ c.name || 'No name' }} &middot; {{ c.contactnumber }}{{ c.address ? ' &middot; ' + c.address : '' }}
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                }
 
                 <div class="row">
                   <div class="col-12">
@@ -729,8 +752,14 @@ export class OrderComponent implements OnInit {
   customerList: any = [];
   selectedcustomerid: any = 0;
   selectedcustomername: string = '';
-  selectedcustomerphoneno: number | null = null;
+  selectedcustomerphoneno: any = null;
   selectedcustomeraddress: string = '';
+  selectedcustomeremail: string = '';
+  // More than one existing customer has the typed / token phone number: the user picks one.
+  phoneMatches: any[] = [];
+  private phoneLookup$ = new Subject<string>();
+  private calc$ = new Subject<void>();
+  private lockedCustomerPhone: any = null;
   selectedwaiterid: any = 0;
   selectedordertypeid: any = 1;
   waiterList: any = [];
@@ -968,6 +997,23 @@ width: 150px;
   }
 
   ngOnInit(): void {
+    this.calc$
+      .pipe(
+        debounceTime(150),
+        switchMap(() => this.query.calculateBill(this.buildCalcRequest()).pipe(catchError(() => of(null)))),
+        takeUntil(this.destroy$),
+      )
+      .subscribe((res: any) => this.applyCalc(res?.data));
+    this.phoneLookup$
+      .pipe(
+        debounceTime(400),
+        switchMap((phone) => this.query.getCustomersByPhone(phone)),
+        takeUntil(this.destroy$),
+      )
+      .subscribe({
+        next: (res: any) => this.onPhoneMatches(res?.data || []),
+        error: () => (this.phoneMatches = []),
+      });
     this.loadMasterData();
     this.getParameterValue();
     if(this.typeId != 1){
@@ -1046,16 +1092,85 @@ width: 150px;
       return;
     }
 
-    this.selectedcustomerid = customer.customerid;
-    this.selectedcustomername = customer.name;
-    this.selectedcustomerphoneno = customer.contactnumber;
-    this.selectedcustomeraddress = customer.address;
+    this.applyCustomer(customer);
 
     // return ;
     // let inputValue = event.target.value;
     // this.selectedcustomerid = inputValue;
     // // this.postBill.
     // console.log(inputValue);
+  }
+
+  // An existing customer: its stored name / phone / address are used and the name is locked.
+  applyCustomer(customer: any): void {
+    this.selectedcustomerid = customer.customerid;
+    this.selectedcustomername = customer.name;
+    this.selectedcustomerphoneno = customer.contactnumber;
+    this.selectedcustomeraddress = customer.address;
+    this.selectedcustomeremail = customer.email || '';
+    this.lockedCustomerPhone = customer.contactnumber;
+    this.phoneMatches = [];
+  }
+
+  // Customers are matched on the phone number only (digits; last 10 when both have 10+).
+  private phoneDigits(phone: any): string {
+    return String(phone ?? '').replace(/\D/g, '');
+  }
+
+  private samePhone(a: any, b: any): boolean {
+    const x = this.phoneDigits(a), y = this.phoneDigits(b);
+    if (x.length < 6 || y.length < 6) return false;
+    return x.length >= 10 && y.length >= 10 ? x.slice(-10) === y.slice(-10) : x === y;
+  }
+
+  // Typing another number releases the locked customer; a full number is checked against the customer master.
+  onPhoneChange(value: any): void {
+    if (this.selectedcustomerid > 0) {
+      if (!this.samePhone(this.lockedCustomerPhone, value)) {
+        this.selectedcustomerid = 0;
+        this.selectedcustomeremail = '';
+      }
+    }
+    this.phoneMatches = [];
+    const digits = this.phoneDigits(value);
+    if (digits.length >= 6 && !(this.selectedcustomerid > 0)) {
+      this.phoneLookup$.next(String(value));
+    }
+  }
+
+  private onPhoneMatches(matches: any[]): void {
+    // The number may have changed while the lookup ran.
+    const fresh = matches.filter((c: any) => this.samePhone(c.contactnumber, this.selectedcustomerphoneno));
+    if (this.selectedcustomerid > 0 || !fresh.length) {
+      this.phoneMatches = [];
+    } else if (fresh.length === 1) {
+      this.applyCustomer(fresh[0]);
+    } else {
+      this.phoneMatches = fresh;
+    }
+    this.changeDetectRef.detectChanges();
+  }
+
+  // A new dine-in order on a table seated from the waitlist starts with the token's customer.
+  private prefillSeatedGuest(tableId: any): void {
+    this.query.getSeatedGuest(tableId).subscribe({
+      next: (res: any) => {
+        const guest = res?.data;
+        // Skip when the user already entered a customer or the table changed meanwhile.
+        if (!guest || this.tableId != tableId || this.selectedcustomerid > 0 || this.selectedcustomername?.trim()) return;
+        const matches: any[] = guest.customers || [];
+        if (matches.length === 1) {
+          this.applyCustomer(matches[0]);
+        } else {
+          this.selectedcustomername = guest.customername;
+          this.selectedcustomerphoneno = guest.mobile;
+          this.selectedcustomeremail = guest.email || '';
+          this.phoneMatches = matches;
+        }
+        this.changeDetectRef.detectChanges();
+      },
+      error: () => {},
+    });
   }
 
   // onWaiterSelect(event:any){
@@ -1127,9 +1242,8 @@ width: 150px;
   getCustomerById(customerId: number) {
     let customer = this.customerList.find((customer: any) => customer.customerid === customerId);
     if (customer) {
-      this.selectedcustomername = customer.name;
-      this.selectedcustomerphoneno = customer.contactnumber;
-      this.selectedcustomeraddress = customer.address;
+      // Keep the id too, so the next KOT on this table does not create the customer again.
+      this.applyCustomer(customer);
     }
   }
 
@@ -1367,7 +1481,7 @@ width: 150px;
           customerid: 0,
           name: this.selectedcustomername.trim(),
           contactnumber: this.selectedcustomerphoneno,
-          email: '',
+          email: this.selectedcustomeremail || '',
           address: this.selectedcustomeraddress,
           branchid: Number(localStorage.getItem('branchid') || 1),
           outletid: Number(localStorage.getItem('outletid') || 1),
@@ -1601,6 +1715,8 @@ width: 150px;
     this.selectedcustomername = '';
     this.selectedcustomerphoneno = null;
     this.selectedcustomeraddress = '';
+    this.selectedcustomeremail = '';
+    this.phoneMatches = [];
     this.inputComment = '';
     this.isPrinted = false;
     this.updateBillId = -1;
@@ -1656,7 +1772,9 @@ width: 150px;
             this.openModal(this.settleTemplate, 'settle');
           }
           this.changeDetectRef.detectChanges();
-        } else {
+        } else if (typeId == 1 && !this.selectedcustomerid && !this.selectedcustomername?.trim()) {
+          // No open order yet: take the customer of the token seated here (if any).
+          this.prefillSeatedGuest(id);
         }
 
         this.stateService.setLoadingState(false);
@@ -1735,119 +1853,65 @@ width: 150px;
     this.getOrderByTable(this.tableId, this.typeId);
   }
 
+  // Sub total, tax, discount, extra charges and total are calculated by the API (Bill/Calculate,
+  // tax inclusive / exclusive from the API's BillingSettings). Many quick changes (adding items) end in
+  // one request; only the latest answer is applied.
   async calculatetotalprice() {
-    console.log(this.postBill.orders, '---otfd--');
+    this.calc$.next();
+  }
 
-    if (!Array.isArray(this.postBill.orders)) {
-      console.error('postBill.orders is not an array!');
-    }
-
-    let localtotalprice = this.postBill.orders.reduce(
-      (sum: number, order: any) => {
-        let price = Number(order.totalprice) || 0; // Ensure it's a valid number
-        console.log(sum, price, 'totalprice');
-        return sum + price;
-      },
-      0,
-    );
-    // Round to 2 decimal places
-
-    this.postBill.subTotalAmount = parseFloat(localtotalprice.toFixed(2));
-
-    // config.json "taxInclusive": true = extract tax from price, false = add tax on top.
-    if (this.taxList.length && localtotalprice) {
-      let localTaxAmount = 0;
-      await this.taxList.forEach((x: any) => {
-        const inRange = x.taxrangestatus
-          ? x.taxfrom <= localtotalprice && x.taxto >= localtotalprice
-          : true;
-        if (!inRange) return;
-        let taxAmount = 0;
-        const inclusive = AppSettings.taxInclusive;
-        if (x.taxtype === 'percentage') {
-          taxAmount = inclusive
-            ? localtotalprice - localtotalprice / (1 + x.taxrate / 100)
-            : (localtotalprice * x.taxrate) / 100;
-        } else if (x.taxtype === 'flat') {
-          taxAmount = x.taxrate;
-        }
-        if (taxAmount) {
-          if (!inclusive) localtotalprice += Number(taxAmount) || 0;
-          localTaxAmount += Number(taxAmount) || 0;
-        }
-      });
-      this.postBill.tax = parseFloat(localTaxAmount.toFixed(2));
-      if (AppSettings.taxInclusive) {
-        this.postBill.subTotalAmount = parseFloat(
-          (localtotalprice - localTaxAmount).toFixed(2),
-        );
-      }
-    }
-
+  private buildCalcRequest() {
+    const orders: any[] = Array.isArray(this.postBill.orders) ? this.postBill.orders : [];
+    const request: any = {
+      orderTypeId: Number(this.typeId) || null,
+      orderIds: orders.filter((o: any) => o.orderid > 0).map((o: any) => o.orderid),
+      newLines: orders
+        .filter((o: any) => !o.orderid)
+        .flatMap((o: any) => (o.orderdetail || []).map((d: any) => ({ itemId: d.itemid, qty: d.qty }))),
+      discountId: null,
+      customDiscount: null,
+    };
     if (this.postBill.discountFlag) {
-      //let localDiscount.valueAmount =0;
-      let discountObject = await this.discountList[this.postBill.discountIndex];
-
-      console.log(discountObject, 'discountObject');
-
-      if (discountObject.discountname == 'customize') {
-        this.postBill.discount =
-          Number(this.selectDiscount.value).toFixed(2) || 0;
-        this.postBill.discountList = discountObject;
-        localtotalprice -= Number(this.selectDiscount.value) || 0;
-      } else {
-        let discountRangeStatus = discountObject.discountrangestatus
-          ? discountObject.discountfrom <= localtotalprice &&
-            discountObject.discountto >= localtotalprice
-          : true;
-
-        if (discountRangeStatus) {
-          let discountAmount = 0;
-          if (discountObject.discounttype == 'percentage') {
-            discountAmount =
-              (localtotalprice * discountObject.discountrate) / 100;
-          } else if (discountObject.discounttype == 'flat') {
-            discountAmount = discountObject.discountrate;
-          }
-          localtotalprice -= Number(discountAmount) || 0;
-          this.postBill.discount = Number(discountAmount).toFixed(2) || 0;
-          this.postBill.discountList = discountObject;
+      const discountObject = this.discountList[this.postBill.discountIndex];
+      if (discountObject) {
+        request.discountId = discountObject.discountid;
+        if (discountObject.discountname == 'customize') {
+          request.customDiscount = Number(this.selectDiscount.value) || 0;
         }
       }
     }
+    return request;
+  }
 
-    /*extralist*/
-
-    if (this.extraList.length && localtotalprice) {
-      let localextraAmount = 0;
-      await this.extraList.forEach((x: any) => {
-        console.log(this.extraList, x.ordertypeid);
-        if (this.typeId == x.ordertypeid) {
-          const inRange = x.extrachargestatus
-            ? x.extrachargefrom <= localtotalprice &&
-              x.extrachargeto >= localtotalprice
-            : true;
-          if (!inRange) return;
-          let extraAmount = 0;
-          if (x.extrachargetype === 'percentage') {
-            extraAmount = (localtotalprice * x.extrachargerate) / 100;
-          } else if (x.extrachargetype === 'flat') {
-            extraAmount = x.extrachargerate;
-          }
-          if (extraAmount) {
-            localtotalprice += Number(extraAmount) || 0;
-            localextraAmount += Number(extraAmount) || 0;
-          }
-        }
-      });
-
-      this.postBill.extraAmount = parseFloat(localextraAmount.toFixed(2));
+  private applyCalc(data: any) {
+    if (!data) return;
+    this.postBill.subTotalAmount = data.subtotal;
+    this.postBill.tax = data.tax;
+    this.postBill.extraAmount = data.extraamount;
+    if (this.postBill.discountFlag) {
+      this.postBill.discount = data.discount;
+      this.postBill.discountList = this.discountList[this.postBill.discountIndex];
     }
-
+    // The unsent order's lines show the server's prices and amounts.
+    const unsent = (this.postBill.orders || []).find((o: any) => !o.orderid);
+    if (unsent && Array.isArray(data.newlines)) {
+      let allMatched = true;
+      for (const line of unsent.orderdetail || []) {
+        const priced = data.newlines.find((l: any) => l.itemid === line.itemid && l.qty === line.qty);
+        if (priced) {
+          line.price = priced.price;
+          line.sumofprice = priced.sumofprice;
+        } else {
+          allMatched = false;
+        }
+      }
+      if (allMatched) unsent.totalprice = data.newordertotal;
+    }
     this.postBill.taxList = this.taxList;
-    this.postBill.totalAmount = parseFloat(localtotalprice.toFixed());
-    this.postBill.billAmount = parseFloat(localtotalprice.toFixed());
-    this.postBill.paidamount = parseFloat(localtotalprice.toFixed());
+    this.postBill.totalAmount = data.total;
+    this.postBill.billAmount = data.total;
+    this.postBill.paidamount = data.total;
+    this.changeDetectRef.detectChanges();
   }
 
   async removeOrderList(Obj: any) {
@@ -1894,7 +1958,7 @@ width: 150px;
       customerid: 0,
       name: this.selectedcustomername,
       contactnumber: this.selectedcustomerphoneno,
-      email: '',
+      email: this.selectedcustomeremail || '',
       address: this.selectedcustomeraddress,
       branchid: 1,
       outletid: 1,

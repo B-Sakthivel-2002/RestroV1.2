@@ -378,6 +378,9 @@ CREATE TABLE IF NOT EXISTS orderdetail (
     CONSTRAINT orderdetail_pkey PRIMARY KEY (orderdetailid),
     CONSTRAINT fk_order FOREIGN KEY (orderid) REFERENCES "Order" (orderid) ON DELETE CASCADE
 );
+-- When the item got its current KOT status (sent to kitchen / ready to serve / picked up):
+-- drives the delayed-order alerts. Added with IF NOT EXISTS so re-running upgrades old DBs.
+ALTER TABLE orderdetail ADD COLUMN IF NOT EXISTS kotstatusat timestamp without time zone;
 
 CREATE TABLE IF NOT EXISTS billheader (
     billid              serial,
@@ -487,6 +490,39 @@ CREATE TABLE IF NOT EXISTS table_history (
 );
 
 CREATE INDEX IF NOT EXISTS ix_table_history_table ON table_history (tableid, createdat DESC);
+
+-- Expenses & cash management (one row per branch and business day) -----
+CREATE TABLE IF NOT EXISTS cash_day (
+    cashdayid   serial,
+    bizdate     date          NOT NULL,
+    openingcash numeric(12,2) NOT NULL DEFAULT 0,
+    countedcash numeric(12,2),
+    notes       text,
+    updatedby   integer,
+    updatedat   timestamp without time zone,
+    outletid    integer,
+    branchid    integer       NOT NULL,
+    CONSTRAINT cash_day_pkey PRIMARY KEY (cashdayid),
+    CONSTRAINT uq_cash_day_branch_date UNIQUE (branchid, bizdate)
+);
+
+-- entrytype: expense | cashin | cashout. Only cash-mode rows change the cash drawer.
+CREATE TABLE IF NOT EXISTS cash_entry (
+    cashentryid serial,
+    bizdate     date          NOT NULL,
+    entrytype   varchar(20)   NOT NULL,
+    category    varchar(60),
+    amount      numeric(12,2) NOT NULL,
+    paymentmode varchar(20)   NOT NULL DEFAULT 'cash',
+    notes       text,
+    createdby   integer,
+    createdat   timestamp without time zone NOT NULL DEFAULT now(),
+    outletid    integer,
+    branchid    integer       NOT NULL,
+    CONSTRAINT cash_entry_pkey PRIMARY KEY (cashentryid)
+);
+
+CREATE INDEX IF NOT EXISTS ix_cash_entry_branch_date ON cash_entry (branchid, bizdate);
 
 -- =====================================================================
 -- SEED DATA

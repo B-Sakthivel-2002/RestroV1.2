@@ -16,6 +16,13 @@ export const routes: Routes = [
     data:{dataRoles:['Admin','SuperAdmin','Manager','Captain']},
     canActivate:[RoleGuard]
    },
+   // TV calling display: called tokens and their tables, full screen without the menu.
+   {
+    path:'token-display',
+    loadComponent:()=>import('./pages/token-display.component').then(m=>m.TokenDisplayComponent),
+    data:{dataRoles:['Admin','SuperAdmin','Manager','Captain']},
+    canActivate:[RoleGuard]
+   },
      // ✅ MAIN APP (with header loaded once)
   {
     path: '',
@@ -194,6 +201,18 @@ export const routes: Routes = [
       data:{dataRoles:['Admin','SuperAdmin']},
       canActivate: [RoleGuard]
    },{
+      path:'customer-loyalty',
+      loadComponent:()=>import('./pages/customer-loyalty.component').then(m=>m.CustomerLoyaltyComponent),
+      canActivate: [RoleGuard],
+      data:{dataRoles:['Admin','SuperAdmin']}
+   },
+   {
+      path:'expenses-cash',
+      loadComponent:()=>import('./pages/expenses-cash.component').then(m=>m.ExpensesCashComponent),
+      canActivate: [RoleGuard],
+      data:{dataRoles:['Admin','SuperAdmin','Manager']}
+   },
+   {
       path:'customer-wise-report',
       loadComponent:()=>import('./pages/customer-wise-report.component').then(m=>m.CustomerWiseReportComponent),
       data:{dataRoles:['Admin','SuperAdmin']},

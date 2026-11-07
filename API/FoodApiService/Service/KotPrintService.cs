@@ -32,10 +32,28 @@ public class KotPrintService
     // kitchenFilter: null = every kitchen of the order, 0 = only the items without a kitchen, n = only kitchen n.
     public async Task<List<KotPrintResult>> PrintOrderAsync(int orderId, int? kitchenFilter = null)
     {
+        var (tickets, jobs) = await QueueOrderAsync(orderId, kitchenFilter);
         var results = new List<KotPrintResult>();
+        var outcomes = await _queue.WaitAsync(jobs);
+        for (int i = 0; i < tickets.Count; i++)
+        {
+            var t = tickets[i];
+            string? outcome = outcomes[i];
+            results.Add(outcome == ""
+                ? new KotPrintResult(t.KitchenId, t.Kitchen, t.Printer, t.Items, true, null, Pending: true)
+                : new KotPrintResult(t.KitchenId, t.Kitchen, t.Printer, t.Items, outcome == null, outcome));
+        }
+        return results;
+    }
+
+    // Loads the order and queues one ticket per kitchen; does not wait. Each job's result: null = printed, else the error.
+    public async Task<(List<(int? KitchenId, string Kitchen, string? Printer, int Items)> Tickets, List<Task<string?>> Jobs)> QueueOrderAsync(int orderId, int? kitchenFilter = null)
+    {
+        var tickets = new List<(int? KitchenId, string Kitchen, string? Printer, int Items)>();
+        var jobs = new List<Task<string?>>();
         var order = await _context.Orders.AsNoTracking().Include(o => o.Orderdetails).FirstOrDefaultAsync(o => o.Orderid == orderId);
         if (order == null || order.Orderdetails.Count == 0)
-            return results;
+            return (tickets, jobs);
 
         string waiterName = await _context.Users.Where(u => u.Userid == order.Waiterid).Select(u => u.Username).FirstOrDefaultAsync() ?? "NA";
         string orderType = await _context.Ordertypes.Where(o => o.Ordertypeid == order.Ordertypeid).Select(o => o.Ordertypename).FirstOrDefaultAsync() ?? "";
@@ -57,8 +75,6 @@ public class KotPrintService
             .GroupBy(d => items.TryGetValue(d.Itemid, out var item) && item.Kitchenid is int kid && kitchens.ContainsKey(kid) ? kid : (int?)null)
             .OrderBy(g => g.Key == null).ThenBy(g => g.Key);
 
-        var tickets = new List<(int? KitchenId, string Kitchen, string? Printer, int Items)>();
-        var jobs = new List<Task<string?>>();
         foreach (var group in groups)
         {
             if (kitchenFilter != null && (group.Key ?? 0) != kitchenFilter)
@@ -72,17 +88,7 @@ public class KotPrintService
             tickets.Add((group.Key, kitchenName, printer, lines.Count));
             jobs.Add(_queue.Enqueue(printer, g => DrawTicket(g, order, kitchenName, orderType, tableName, waiterName, lines)));
         }
-
-        var outcomes = await _queue.WaitAsync(jobs);
-        for (int i = 0; i < tickets.Count; i++)
-        {
-            var t = tickets[i];
-            string? outcome = outcomes[i];
-            results.Add(outcome == ""
-                ? new KotPrintResult(t.KitchenId, t.Kitchen, t.Printer, t.Items, true, null, Pending: true)
-                : new KotPrintResult(t.KitchenId, t.Kitchen, t.Printer, t.Items, outcome == null, outcome));
-        }
-        return results;
+        return (tickets, jobs);
     }
 
     // One line per failed kitchen, for the captain's message.

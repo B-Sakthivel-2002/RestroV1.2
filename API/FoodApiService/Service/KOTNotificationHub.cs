@@ -20,6 +20,18 @@ public class KOTNotificationHub : Hub
 
     public static string BranchGroup(int? branchId) => "branch-" + branchId.GetValueOrDefault();
 
+    // One user's connections (all their devices): personal alerts, e.g. to the captain of an order.
+    public static string UserGroup(int userId) => "user-" + userId;
+
+    // Users of one role in one branch, e.g. every chef of branch 1 ("Cheif" is the same role).
+    public static string RoleGroup(int? branchId, string? role) => $"branch-{branchId.GetValueOrDefault()}-role-{NormalizeRole(role)}";
+
+    public static string NormalizeRole(string? role)
+    {
+        string r = (role ?? "").Trim().Replace(" ", "").ToLowerInvariant();
+        return r == "cheif" ? "chef" : r;
+    }
+
     // Groups an event about one branch goes to: that branch's clients plus unscoped clients.
     public static IReadOnlyList<string> GroupsFor(int? branchId) => new[] { BranchGroup(branchId), UnscopedGroup };
 
@@ -35,6 +47,11 @@ public class KOTNotificationHub : Hub
             // Outlet owners join every branch of their outlet; everyone else just their own branch.
             foreach (int branchId in tenant.BranchIds)
                 await Groups.AddToGroupAsync(Context.ConnectionId, BranchGroup(branchId));
+            if (tenant.UserId > 0)
+                await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(tenant.UserId));
+            if (!string.IsNullOrWhiteSpace(tenant.Role))
+                foreach (int branchId in tenant.BranchIds.DefaultIfEmpty(tenant.BranchId))
+                    await Groups.AddToGroupAsync(Context.ConnectionId, RoleGroup(branchId, tenant.Role));
             Context.Items[BranchIdsKey] = tenant.BranchIds;
         }
         await base.OnConnectedAsync();

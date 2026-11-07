@@ -241,6 +241,12 @@ export interface itemWiseOrder {
                     Export to Excel
                   </button>
                 </li>
+                <li>
+                  <!-- Summary + item-wise of the selected period to the owner's WhatsApp (numbers in API config). -->
+                  <button class="btn btn-outline-success ms-2" [disabled]="sendingOwnerReport" (click)="sendOwnerReport()" title="Send this period's sales report to the owner on WhatsApp">
+                    <i class="pi pi-whatsapp"></i> {{ sendingOwnerReport ? 'Sending...' : 'Send to owner' }}
+                  </button>
+                </li>
               </ul>
               <div class="tab-content " id="summary-content">
                 <div
@@ -1226,6 +1232,23 @@ orderlist: any;
 
 //   doc.save('SalesReport.pdf');
 // }
+
+sendingOwnerReport = false;
+
+// Same period as the report on screen (From / To dates).
+sendOwnerReport() {
+  this.sendingOwnerReport = true;
+  this.query.sendOwnerReport(this.post.fromDate, this.post.toDate).subscribe({
+    next: (res: any) => {
+      this.sendingOwnerReport = false;
+      this.alertService.showAlert(res?.status === 'Success' ? 'Sent' : 'Error !', res?.message || 'Done');
+    },
+    error: (err: any) => {
+      this.sendingOwnerReport = false;
+      this.alertService.showAlert('Error !', err?.error?.message || 'Could not send the report');
+    },
+  });
+}
 
 exportToExcel() {
   const table = document.getElementById('billSummaryTable');

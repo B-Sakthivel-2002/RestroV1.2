@@ -72,6 +72,16 @@ export const menuList ={
           name: "Customer wise Report",
           url: "/customer-wise-report",
           icon: ""
+        },
+        {
+          name: "Customer Loyalty",
+          url: "/customer-loyalty",
+          icon: ""
+        },
+        {
+          name: "Expenses & Cash",
+          url: "/expenses-cash",
+          icon: ""
         },{
           name: "Payment mode wise Report",
           url: "/payment-mode-wise-report",
@@ -96,6 +106,11 @@ export const menuList ={
         {
           name: "Token Booking",
           url: "/token-booking",
+          icon: ""
+        },
+        {
+          name: "Token Display (TV)",
+          url: "/token-display",
           icon: ""
         },
         {
@@ -333,6 +348,11 @@ export const captainMenuList ={
         {
           name: "Token Booking",
           url: "/token-booking",
+          icon: ""
+        },
+        {
+          name: "Token Display (TV)",
+          url: "/token-display",
           icon: ""
         },        
         

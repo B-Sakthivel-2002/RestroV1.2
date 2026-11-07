@@ -27,10 +27,18 @@ public class OrdersController : ControllerBase
     private readonly DocumentNumberService _numbers;
     private readonly SeatingService _seating;
     private readonly KotPrintService _kotPrint;
+    private readonly OrderAlertNotifier _alerts;
+    private readonly WhatsAppService _whatsApp;
+    private readonly BillCalculator _calc;
+    private readonly BackgroundPrinter _printer;
 
-    public OrdersController(HotelContext context, IHubContext<KOTNotificationHub> hub, IConfiguration configuration, ITenantContext tenant, DocumentNumberService numbers, SeatingService seating, KotPrintService kotPrint)
+    public OrdersController(HotelContext context, IHubContext<KOTNotificationHub> hub, IConfiguration configuration, ITenantContext tenant, DocumentNumberService numbers, SeatingService seating, KotPrintService kotPrint, OrderAlertNotifier alerts, WhatsAppService whatsApp, BillCalculator calc, BackgroundPrinter printer)
     {
+        _calc = calc;
+        _printer = printer;
         _kotPrint = kotPrint;
+        _alerts = alerts;
+        _whatsApp = whatsApp;
         _context = context;
         _hub = hub;
         _configuration = configuration;
@@ -75,6 +83,9 @@ public class OrdersController : ControllerBase
                 .Select(i => new { i.Itemid, i.Itemname })
                 .ToDictionaryAsync(i => i.Itemid, i => i.Itemname);
 
+            // Prices and amounts come from the server: item master price, line = qty x price, order = sum of lines.
+            var prices = await ItemPricesAsync(detailItemIds, branchid);
+
             var order = new Order
             {
                 Waiterid = orderDto.WaiterID,
@@ -83,7 +94,7 @@ public class OrdersController : ControllerBase
                 Timedate = orderDto.TimeDate.ToLocalTime(),
                 Customerid = orderDto.CustomerID,
                 Bookingid = orderDto.BookingID,
-                Totalprice = orderDto.TotalPrice,
+                Totalprice = orderDto.OrderDetail.Sum(d => d.Qty * prices.GetValueOrDefault(d.ItemID)),
                 Status = "submitted",
                 Billingid = 0,
                 Ordertypeid = orderDto.OrderTypeID,
@@ -97,11 +108,12 @@ public class OrdersController : ControllerBase
                 {
                     Itemid = d.ItemID,
                     Qty = d.Qty,
-                    Price = d.Price,
-                    Sumofprice = d.SumOfPrice,
+                    Price = prices.GetValueOrDefault(d.ItemID),
+                    Sumofprice = d.Qty * prices.GetValueOrDefault(d.ItemID),
                     Branchid = branchid,
                     Outletid = tenant.OutletId,
-                    Name = itemNames.GetValueOrDefault(d.ItemID)
+                    Name = itemNames.GetValueOrDefault(d.ItemID),
+                    Kotstatusat = DateTime.Now
                 }).ToList()
             };
 
@@ -177,11 +189,12 @@ public class OrdersController : ControllerBase
 
 
 
-            // One KOT per kitchen, each on that kitchen's printer.
-            var printResults = await _kotPrint.PrintOrderAsync(order.Orderid);
-            var failedPrints = printResults.Where(r => !r.Ok).ToList();
-            bool printFailed = failedPrints.Count > 0;
-            string printError = KotPrintService.Describe(failedPrints);
+            // One KOT per kitchen, each on that kitchen's printer - printed in the background, so the
+            // request never waits for a printer. A failure reaches the user (and branch admins) as a live alert.
+            _printer.QueueKot(order.Orderid, userid, branchid);
+            var printResults = new List<KotPrintResult>();
+            bool printFailed = false;
+            string printError = "";
 
 
             // =============================
@@ -210,19 +223,53 @@ public class OrdersController : ControllerBase
 
 
 
+            // More items for a table that is already eating: kitchen and captain see it as an addition.
+            if (order.Tableid is > 0 && await _context.Orders.AnyAsync(o => o.Tableid == order.Tableid && o.Orderid != order.Orderid
+                    && (o.Status == "submitted" || o.Status == "printed")))
+            {
+                var info = await OrderAlertNotifier.OrderInfoAsync(_context, order);
+                var added = order.Orderdetails.Select(d => $"{d.Name ?? "Item"} x{d.Qty}").ToList();
+                await _alerts.SendAsync(_context, order, OrderAlertTypes.ItemsAdded, "Items added",
+                    $"{OrderAlertNotifier.Where(info, order)}: {string.Join(", ", added)}",
+                    added, toKitchen: true, toCaptain: true, byUserId: userid);
+            }
+
+            // The customer of the order (if one was chosen / entered) gets a WhatsApp confirmation.
+            if (_whatsApp.IsConfigured && order.Customerid is > 0)
+            {
+                var customer = await _context.Customers.AsNoTracking().Where(c => c.Customerid == order.Customerid)
+                    .Select(c => new { c.Name, c.Contactnumber }).FirstOrDefaultAsync();
+                if (customer != null)
+                {
+                    var info = await OrderAlertNotifier.OrderInfoAsync(_context, order);
+                    _whatsApp.SendOrderPlaced(customer.Contactnumber, customer.Name, await _seating.BranchNameAsync(order.Branchid),
+                        order.Ordernumber, string.Join(", ", order.Orderdetails.Select(d => $"{d.Name ?? "Item"} x{d.Qty}")),
+                        !string.IsNullOrWhiteSpace(info.TableName) ? "Table " + info.TableName : info.OrderTypeName ?? "Order");
+                }
+            }
+
             return CreatedAtAction("GetOrderById", new { id = order.Orderid }, new
             {
                 status = "Success",
-                message = printFailed ? $"Order created successfully. Kitchen printing failed: {printError}" : "Order created successfully and KOT printed successfully.",
-                printStatus = printFailed ? "Failed" : "Success",
+                message = printFailed ? $"Order created successfully. Kitchen printing failed: {printError}" : "Order created successfully. KOT sent to the kitchen printer.",
+                printStatus = printFailed ? "Failed" : "Queued",
                 printResults,
                 data = order
             });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { status = "Error", message = ex.Message, data = (object)null });
+            return StatusCode(500, new { status = "Error", message = ex.GetBaseException().Message, data = (object)null });
         }
+    }
+
+    // Item master price (the menu's Defaultprice) of each item.
+    private async Task<Dictionary<int, decimal>> ItemPricesAsync(IEnumerable<int> itemIds, int? branchId)
+    {
+        var ids = itemIds.Distinct().ToList();
+        return await _context.Items.AsNoTracking()
+            .Where(i => ids.Contains(i.Itemid) && i.Branchid == branchId)
+            .ToDictionaryAsync(i => i.Itemid, i => i.Defaultprice ?? 0m);
     }
 
     [HttpPost("UpdateOrder")]
@@ -237,32 +284,77 @@ public class OrdersController : ControllerBase
         if (invalid != null)
             return BadRequest(new { status = "Error", message = invalid });
 
-        existingOrder.Waiterid = addOrders.WaiterID;
-        existingOrder.Tableid = addOrders.TableID;
-        existingOrder.Bookingid = addOrders.BookingID;
-        existingOrder.Totalprice = addOrders.TotalPrice;
-        existingOrder.Ordertypeid = addOrders.OrderTypeID;
-        existingOrder.Comments = addOrders.Comments;
-        _context.Orders.Update(existingOrder);
-        await _context.SaveChangesAsync();
-
-        var details = await _context.Orderdetails.Where(e => e.Orderid == addOrders.OrderId).ToListAsync();
+        var details = await _context.Orderdetails.Where(e => e.Orderid == addOrders.OrderId).OrderBy(e => e.Orderdetailid).ToListAsync();
         if (details == null || !details.Any())
             return NotFound(new { status = "Error", message = "order details not found" });
 
-        _context.Orderdetails.RemoveRange(details);
-        var entities = addOrders.OrderDetail.Select(item => new Orderdetail
+        string? oldComments = existingOrder.Comments;
+        existingOrder.Waiterid = addOrders.WaiterID;
+        existingOrder.Tableid = addOrders.TableID;
+        existingOrder.Bookingid = addOrders.BookingID;
+        existingOrder.Ordertypeid = addOrders.OrderTypeID;
+        existingOrder.Comments = addOrders.Comments;
+
+        // Lines are matched to the existing ones by item, so an unchanged line keeps its id and
+        // KOT status (ready / picked up). A line whose quantity changed goes back to the kitchen.
+        var now = DateTime.Now;
+        var itemIds = details.Select(d => d.Itemid).Concat(addOrders.OrderDetail.Select(d => d.ItemID)).Distinct().ToList();
+        var names = await _context.Items.AsNoTracking().Where(i => itemIds.Contains(i.Itemid))
+            .ToDictionaryAsync(i => i.Itemid, i => i.Itemname);
+        string NameOf(int itemId) => names.GetValueOrDefault(itemId) ?? "Item";
+        var prices = await ItemPricesAsync(itemIds, existingOrder.Branchid);
+
+        var unmatched = details.ToList();
+        var changes = new List<string>();
+        foreach (var item in addOrders.OrderDetail)
         {
-            Orderid = existingOrder.Orderid,
-            Itemid = item.ItemID,
-            Qty = item.Qty,
-            Price = item.Price,
-            Sumofprice = item.SumOfPrice,
-            Branchid = existingOrder.Branchid,
-            Outletid = existingOrder.Outletid
-        }).ToList();
-        _context.Orderdetails.AddRange(entities);
+            var line = unmatched.FirstOrDefault(d => d.Itemid == item.ItemID);
+            if (line == null)
+            {
+                _context.Orderdetails.Add(new Orderdetail
+                {
+                    Orderid = existingOrder.Orderid,
+                    Itemid = item.ItemID,
+                    Qty = item.Qty,
+                    Price = prices.GetValueOrDefault(item.ItemID),
+                    Sumofprice = item.Qty * prices.GetValueOrDefault(item.ItemID),
+                    Branchid = existingOrder.Branchid,
+                    Outletid = existingOrder.Outletid,
+                    Kotstatusat = now
+                });
+                changes.Add($"Added {NameOf(item.ItemID)} x{item.Qty}");
+                continue;
+            }
+            unmatched.Remove(line);
+            if (line.Qty != item.Qty)
+            {
+                changes.Add($"{NameOf(item.ItemID)} qty {line.Qty} -> {item.Qty}");
+                line.KOTStatus = null;
+                line.Kotstatusat = now;
+            }
+            // The price the line was ordered at stays; the amount follows the quantity.
+            line.Qty = item.Qty;
+            line.Sumofprice = line.Qty * line.Price;
+        }
+        foreach (var removed in unmatched)
+            changes.Add($"Removed {NameOf(removed.Itemid)} x{removed.Qty}");
+        _context.Orderdetails.RemoveRange(unmatched);
+        existingOrder.Totalprice = _context.Orderdetails.Local
+            .Where(d => d.Orderid == existingOrder.Orderid && _context.Entry(d).State != EntityState.Deleted)
+            .Sum(d => d.Sumofprice ?? d.Qty * d.Price);
+        if ((oldComments ?? "").Trim() != (existingOrder.Comments ?? "").Trim())
+            changes.Add(string.IsNullOrWhiteSpace(existingOrder.Comments) ? "Comments removed" : $"Comments: {existingOrder.Comments}");
+
         await _context.SaveChangesAsync();
+
+        if (changes.Count > 0)
+        {
+            var info = await OrderAlertNotifier.OrderInfoAsync(_context, existingOrder);
+            await _alerts.SendAsync(_context, existingOrder, OrderAlertTypes.Edited, "Order edited",
+                $"{OrderAlertNotifier.Where(info, existingOrder)}: {string.Join(", ", changes)}",
+                changes, toKitchen: true, toCaptain: true, byUserId: tenant.UserId);
+        }
+        await _alerts.RefreshAsync(existingOrder, "Edited");
 
 
 
@@ -284,6 +376,16 @@ public class OrdersController : ControllerBase
         order.Remarks = cancel.Remarks;
         await _context.SaveChangesAsync();
         await _seating.ReleaseIfFreeAsync(new[] { order.Tableid }, tenant.UserId);
+
+        // The kitchen stops cooking it and the captain knows the order is gone.
+        var info = await OrderAlertNotifier.OrderInfoAsync(_context, order);
+        var items = await _context.Orderdetails.AsNoTracking().Where(d => d.Orderid == order.Orderid)
+            .Select(d => (_context.Items.Where(i => i.Itemid == d.Itemid).Select(i => i.Itemname).FirstOrDefault() ?? "Item") + " x" + d.Qty)
+            .ToListAsync();
+        await _alerts.SendAsync(_context, order, OrderAlertTypes.Cancelled, "Order cancelled",
+            $"{OrderAlertNotifier.Where(info, order)} cancelled" + (string.IsNullOrWhiteSpace(cancel.Remarks) ? "" : $": {cancel.Remarks}"),
+            items, toKitchen: true, toCaptain: true, byUserId: tenant.UserId);
+        await _alerts.RefreshAsync(order, "Cancelled");
         return Ok(new { status = "Success", message = "order cancelled successfully" });
     }
 
@@ -600,6 +702,8 @@ public class OrdersController : ControllerBase
             var orderDetail = existingOrderDetails
                 .First(x => x.Orderdetailid == model.OrderDetailId);
 
+            if (orderDetail.KOTStatus != model.KOTStatus)
+                orderDetail.Kotstatusat = DateTime.Now;
             orderDetail.KOTStatus = model.KOTStatus;
         }
 
@@ -690,6 +794,17 @@ public class OrdersController : ControllerBase
             signalRData
         );
         //Signarr Ends
+
+        // The chef marked items ready: the order's captain comes to pick them up.
+        var readyIds = models.Where(m => m.KOTStatus == KotStatuses.ReadyToServe).Select(m => m.OrderDetailId).ToHashSet();
+        if (readyIds.Count > 0)
+        {
+            var info = await OrderAlertNotifier.OrderInfoAsync(_context, order);
+            var readyItems = orderDetails.Where(d => readyIds.Contains(d.OrderDetailId)).Select(d => $"{d.Name ?? "Item"} x{d.Qty}").ToList();
+            await _alerts.SendAsync(_context, order, OrderAlertTypes.ReadyToServe, "Ready to serve",
+                $"{OrderAlertNotifier.Where(info, order)}: {string.Join(", ", readyItems)}",
+                readyItems, toKitchen: false, toCaptain: true, byUserId: tenant.UserId);
+        }
 
         return Ok(new
         {
@@ -848,6 +963,7 @@ public class OrdersController : ControllerBase
                         Price = detail.Price,
                         Sumofprice = movedAmount,
                         KOTStatus = detail.KOTStatus,
+                        Kotstatusat = detail.Kotstatusat,
                         Branchid = detail.Branchid,
                         Outletid = detail.Outletid
                     });

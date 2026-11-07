@@ -82,6 +82,19 @@ builder.Services.AddSingleton<EmailService>();
 builder.Services.AddScoped<SeatingService>();
 builder.Services.AddScoped<KotPrintService>();
 builder.Services.AddSingleton<PrintQueue>();
+// KOT / bill printing off the request: CreateOrder and CreateBill only queue the ticket.
+builder.Services.AddScoped<BillPrintService>();
+builder.Services.AddSingleton<BackgroundPrinter>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BackgroundPrinter>());
+// Reorder / cancel / ready-to-serve notifications and the delayed-order check (appsettings OrderAlertSettings).
+builder.Services.AddSingleton<OrderAlertNotifier>();
+// Order / bill amounts are calculated on the server (appsettings BillingSettings:TaxInclusive).
+builder.Services.AddScoped<BillCalculator>();
+builder.Services.AddHostedService<OrderDelayMonitor>();
+// WhatsApp messages to customers (appsettings WhatsAppSettings, off by default).
+builder.Services.AddHttpClient(nameof(WhatsAppService));
+builder.Services.AddSingleton<WhatsAppService>();
+builder.Services.AddHostedService<WhatsAppSender>();
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>

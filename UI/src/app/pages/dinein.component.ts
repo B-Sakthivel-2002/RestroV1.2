@@ -50,6 +50,12 @@ import { finalize } from 'rxjs';
                                         </h4>
                                         }
                                         
+                                        @if(!ls.mergedinto && ls.seatedToken){
+                                          <h5 class="seated-by">Occupied by {{ls.seatedToken}}{{ ls.seatedName ? ' · ' + ls.seatedName : '' }}</h5>
+                                        } @else if(!ls.mergedinto && ls.tablestate=='Reserved' && ls.tokencode){
+                                          <h5 class="seated-by">Reserved for {{ls.tokencode}}</h5>
+                                        }
+
                                         @if(ls.orderStatus=='submitted' ||  ls.orderStatus =='printed'){
                                           <h5>Price : {{ls.orderTotalAmount}}</h5>
                                         }
@@ -93,7 +99,7 @@ import { finalize } from 'rxjs';
         </div>
     </div>
   `,
-  styles: ``
+  styles: `.seated-by{font-size:12px;font-weight:600;margin:4px 0 0;opacity:.85}`
 })
 export class DineinComponent implements OnInit{
 

@@ -44,6 +44,9 @@ public class Orderdetail : IBranchScoped
 
     public string? KOTStatus { get; set; }
 
+    // When KOTStatus last changed (null on rows older than this column).
+    public DateTime? Kotstatusat { get; set; }
+
     public int? Branchid { get; set; }
 
     public int? Outletid { get; set; }

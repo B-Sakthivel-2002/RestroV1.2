@@ -6,6 +6,7 @@ import { QueryService } from '@appservices/query.service';
 import { AuthService } from '@appservices/auth.service';
 import { BranchSelectComponent } from '../shared/component/branch-select.component';
 import { AppSettings } from '../core/constants/Appsettings';
+import { Subject, debounceTime, switchMap, of, catchError, takeUntil } from 'rxjs';
 
 // Walk-in token booking: a full-screen page (no menu) for the entrance desk or a tablet.
 // The captain's waitlist screen (/waitlist) picks the tokens up automatically.
@@ -29,11 +30,12 @@ import { AppSettings } from '../core/constants/Appsettings';
           <p class="tb-sub">Fill in your details and we will call you when your table is ready.</p>
 
           <form [formGroup]="form" (ngSubmit)="submit()">
-            <app-branch-select [(branchId)]="branchId"></app-branch-select>
+            <app-branch-select [branchId]="branchId" (branchIdChange)="onBranchChange($event)"></app-branch-select>
 
             <label class="tb-label" for="tbName">Name *</label>
             <input id="tbName" class="form-control form-control-lg" formControlName="customerName" maxlength="100" autocomplete="off" />
             @if (invalid('customerName')) { <small class="text-danger">Please enter your name.</small> }
+            @if (knownName) { <small class="text-muted">Welcome back! We have your name from your last visit.</small> }
 
             <label class="tb-label" for="tbMobile">Mobile number *</label>
             <input id="tbMobile" class="form-control form-control-lg" formControlName="mobile" inputmode="tel" maxlength="20" autocomplete="off" />
@@ -129,6 +131,10 @@ export class TokenBookingComponent implements OnInit, OnDestroy {
   issued: any = null;
   countdown = 0;
   private timer: any;
+  // Name of an existing customer with the typed mobile: filled in and locked.
+  knownName: string | null = null;
+  private lookup$ = new Subject<string>();
+  private destroy$ = new Subject<void>();
 
   constructor(private fb: FormBuilder, private query: QueryService, private auth: AuthService) {}
 
@@ -139,10 +145,41 @@ export class TokenBookingComponent implements OnInit, OnDestroy {
       email: ['', [Validators.email, Validators.maxLength(150)]],
       notes: ['']
     });
+
+    this.form.get('mobile')!.valueChanges.pipe(takeUntil(this.destroy$)).subscribe(v => this.lookup$.next(String(v ?? '').trim()));
+    this.lookup$.pipe(
+      debounceTime(400),
+      switchMap(mobile => mobile.replace(/\D/g, '').length < 6
+        ? of(null)
+        : this.query.getKnownCustomer(mobile, this.auth.isOutletOwner() ? this.branchId : null).pipe(catchError(() => of(null)))),
+      takeUntil(this.destroy$)
+    ).subscribe((res: any) => this.applyKnownName(res?.data?.name || null));
   }
 
   ngOnDestroy(): void {
     clearInterval(this.timer);
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  onBranchChange(id: number | null): void {
+    this.branchId = id;
+    // Customers are per branch: check the number again for the new branch.
+    const mobile = String(this.form.get('mobile')!.value ?? '').trim();
+    this.lookup$.next(mobile);
+  }
+
+  private applyKnownName(name: string | null): void {
+    const nameControl = this.form.get('customerName')!;
+    if (name) {
+      nameControl.setValue(name);
+      nameControl.disable();
+    } else if (this.knownName) {
+      // The number changed away from a known customer: free the field again.
+      nameControl.enable();
+      nameControl.setValue('');
+    }
+    this.knownName = name;
   }
 
   invalid(name: string): boolean {
@@ -164,7 +201,7 @@ export class TokenBookingComponent implements OnInit, OnDestroy {
       this.form.markAllAsTouched();
       return;
     }
-    const v = this.form.value;
+    const v = this.form.getRawValue();
     this.saving = true;
     this.query.createWaitlistToken({
       customerName: v.customerName.trim(),
@@ -191,7 +228,10 @@ export class TokenBookingComponent implements OnInit, OnDestroy {
     this.issued = null;
     this.guests = 2;
     this.errorMessage = '';
+    this.knownName = null;
+    this.form.get('customerName')!.enable();
     this.form.reset({ customerName: '', mobile: '', email: '', notes: '' });
+    this.lookup$.next('');
   }
 
   // Return to an empty form on its own, so the next guest never sees the previous guest's details.
