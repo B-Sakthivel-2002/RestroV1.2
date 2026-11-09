@@ -15,18 +15,27 @@ public class AuthController : ControllerBase
 {
     private readonly IConfiguration _config;
     private readonly HotelContext _context;
+    private readonly LoginEncryption _encryption;
 
-    public AuthController(IConfiguration config, HotelContext context)
+    public AuthController(IConfiguration config, HotelContext context, LoginEncryption encryption)
     {
         _config = config;
         _context = context;
+        _encryption = encryption;
+    }
+
+    // What the browser needs to encrypt the password for one login attempt.
+    [HttpGet("login-key")]
+    public IActionResult LoginKey()
+    {
+        return Ok(new { status = "Success", data = new { publicKey = _encryption.PublicKeyPem, nonce = _encryption.NewNonce() } });
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginModel model)
     {
-        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == model.username && u.Password == model.password && u.Status == true);
-        if (user == null)
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == model.username && u.Status == true);
+        if (!PasswordSecurity.Verify(user?.Password, _encryption.Decrypt(model.password)))
         {
             return Ok(new { status = "Error", message = "Invalid credentials", data = (object)null });
         }

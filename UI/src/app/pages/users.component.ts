@@ -30,7 +30,6 @@ import { AlertService } from '@appservices/alert.service';
                       <tr>                        
                         <th scope="col">User Id</th>
                         <th scope="col">User name</th> 
-                        <th scope="col">Password</th>     
                         <th scope="col">Role</th>     
                         <th scope="col">Branch Name</th>
                          <th scope="col" style="width:200px" >Status</th>
@@ -44,7 +43,6 @@ import { AlertService } from '@appservices/alert.service';
                       <tr>                       
                           <td>{{fs.userid}}</td>
                           <td>{{fs.username	}}</td>
-                          <td>{{fs.password}}</td>       
                            <td>{{fs.role}}</td>          
                            <td>{{fs.branchName}}</td>                
                           <td [ngClass]="fs.status? 'status-on': 'status-off'">{{fs.status ? 'On' : 'Off'}}</td>
@@ -96,10 +94,10 @@ import { AlertService } from '@appservices/alert.service';
                             </div>
                           </div>
                           <div class="col-md-6">
-                            <label for="password" name="password" class="col-form-label required">Password <span class="req-char">(Max 6 characters )</span></label>
-                            <input type="password" value="" class="form-control" formControlName="password" />
+                            <label for="password" name="password" class="col-form-label" [class.required]="formType !== 'edit'">Password <span class="req-char">{{ formType === 'edit' ? '(Leave blank to keep the current password)' : '(Min 6 characters)' }}</span></label>
+                            <input type="password" value="" class="form-control" formControlName="password" autocomplete="new-password" />
                             <div *ngIf="userForm.get('password')?.invalid && userForm.get('password')?.touched">
-                              <small class="text-danger">user rate is required.</small>
+                              <small class="text-danger">Password must be at least 6 characters.</small>
                             </div>
                           </div>
                           
@@ -364,9 +362,10 @@ export class UsersComponent implements OnInit {
      if (flag === 'create') {
       this.userForm.reset(this.initialUserFormValues);
       this.formType = 'create';
-      console.log(this.userForm);
+      this.setPasswordRules(true);
     }else{
        this.formType = 'edit';
+       this.setPasswordRules(false);
 
         const localUserList = this.userList.filter((x: any) => x.userid === inputId);
   
@@ -374,7 +373,7 @@ export class UsersComponent implements OnInit {
         this.userForm.patchValue({
           userid: localUserList[0].userid,
           username:localUserList[0].username,
-          password: localUserList[0].password,
+          password: '',
           status: localUserList[0].status,
           branchid: localUserList[0].branchid ? localUserList[0].branchid : -1
         });
@@ -384,6 +383,13 @@ export class UsersComponent implements OnInit {
 
     }
 
+  }
+
+  // Passwords are never sent to the browser: required for a new user, optional when editing.
+  private setPasswordRules(required: boolean) {
+    const control = this.userForm.get('password');
+    control?.setValidators(required ? [Validators.required, Validators.minLength(6)] : [Validators.minLength(6)]);
+    control?.updateValueAndValidity();
   }
 
   setRoleList(flag: string, inputId: number) {

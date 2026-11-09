@@ -5,7 +5,7 @@
 --   1. Create an empty database, e.g.   CREATE DATABASE restro;
 --   2. Connect to it and run this whole file (pgAdmin Query Tool / psql -f).
 --   3. Set ConnectionStrings:SSConnectionString in appsettings.json to it.
---   4. Start the API and log in as:   A2B / super123
+--   4. Start the API and log in as:   A2B
 --      (outlet owner of A2B). Then set up from the app: categories (Status On),
 --      items, tax, floors and tables, and open the day before taking orders.
 --
@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS branch (
     CONSTRAINT fk_branch_outlet FOREIGN KEY (outletid) REFERENCES outlet (outletid)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_branch_code ON branch (upper(code)) WHERE code IS NOT NULL;
+
+-- Express Stall is switched on branch by branch (menu entry, stall order screen, category flag).
+ALTER TABLE branch ADD COLUMN IF NOT EXISTS expressstall boolean NOT NULL DEFAULT false;
 
 -- Kitchens of a branch, each with its own KOT printer (Windows printer name as installed on the
 -- API computer, e.g. "EPSON TM-T82" or a shared one "\\KITCHEN-PC\EPSON").
@@ -563,10 +566,10 @@ ON CONFLICT DO NOTHING;
 
 
 
--- User (password stored in plain text, as the current login expects) ----
---   A2B / super123   SuperAdmin (outlet owner of A2B, home branch A2B Chennai)
+-- User (password is a one-way hash) ----
+--   A2B   SuperAdmin (outlet owner of A2B, home branch A2B Chennai)
 INSERT INTO "user" (userid, username, password, status, branchid, outletid) VALUES
-    (1, 'A2B', 'super123', true, 1, 1)
+    (1, 'A2B', '$pbkdf2$AQAAAAIAAYagAAAAEANS/cArr7x8Rplj5ERfUePz5WihmyW0MRcNetbEKfYhuxOu2SNOH/bZpfoSj+nFGg==', true, 1, 1)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO userroles (userroleid, userid, roleid, branchid, outletid) VALUES
@@ -593,5 +596,11 @@ BEGIN
             r.tbl, r.col, r.col, r.tbl, r.tbl);
     END LOOP;
 END $$;
+
+-- Shared order type used by the branches that have Express Stall switched on (added after the id
+-- generators are moved, so it gets the next free id).
+INSERT INTO ordertype (ordertypename, status)
+SELECT 'Express Stall', true
+WHERE NOT EXISTS (SELECT 1 FROM ordertype WHERE lower(trim(ordertypename)) = 'express stall');
 
 COMMIT;

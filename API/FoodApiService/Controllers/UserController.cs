@@ -30,7 +30,6 @@ public class UserController : ControllerBase
         {
             Userid = u.Userid,
             Username = u.Username,
-            Password = u.Password,
             Status = u.Status,
             Branchid = u.Branchid,
             RoleId = _context.Userroles.Where(x => x.Userid == u.Userid).Select(x => x.Roleid).FirstOrDefault(),
@@ -56,17 +55,36 @@ public class UserController : ControllerBase
         return Ok(new { status = "Success", message = "User fetched", data = user });
     }
 
+    public class UserSaveRequest
+    {
+        public int Userid { get; set; }
+        public string? Username { get; set; }
+        // Required for a new user. On update, blank keeps the current password.
+        public string? Password { get; set; }
+        public bool? Status { get; set; }
+        public int? Branchid { get; set; }
+    }
+
     [HttpPost]
-    public async Task<IActionResult> PostUser([FromBody] User user)
+    public async Task<IActionResult> PostUser([FromBody] UserSaveRequest request)
     {
         var tenant = await _tenant.GetAsync();
-        if (string.IsNullOrWhiteSpace(user.Username))
+        if (string.IsNullOrWhiteSpace(request.Username))
             return BadRequest(new { status = "Error", message = "Username is required", data = (object)null });
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { status = "Error", message = "Password is required", data = (object)null });
 
-        user.Username = user.Username.Trim();
-        if (await UsernameTaken(user.Username, 0))
+        string username = request.Username.Trim();
+        if (await UsernameTaken(username, 0))
             return BadRequest(new { status = "Error", message = "Username already exists", data = (object)null });
 
+        var user = new User
+        {
+            Username = username,
+            Password = PasswordSecurity.Hash(request.Password),
+            Status = request.Status,
+            Branchid = request.Branchid
+        };
         user.StampBranch(tenant, user.Branchid);
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
@@ -74,26 +92,29 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("UpdateUser")]
-    public async Task<IActionResult> UpdateUser([FromBody] User user)
+    public async Task<IActionResult> UpdateUser([FromBody] UserSaveRequest request)
     {
-        if (user.Userid == 0)
+        if (request.Userid == 0)
             return BadRequest(new { status = "Error", message = "Invalid user ID", data = (object)null });
 
         var tenant = await _tenant.GetAsync();
-        var existing = await ManageableUsers(tenant).AsNoTracking().FirstOrDefaultAsync(u => u.Userid == user.Userid);
-        if (existing == null)
+        var user = await ManageableUsers(tenant).FirstOrDefaultAsync(u => u.Userid == request.Userid);
+        if (user == null)
             return NotFound(new { status = "Error", message = "User not found", data = (object)null });
 
-        if (string.IsNullOrWhiteSpace(user.Username))
+        if (string.IsNullOrWhiteSpace(request.Username))
             return BadRequest(new { status = "Error", message = "Username is required", data = (object)null });
-        user.Username = user.Username.Trim();
-        if (await UsernameTaken(user.Username, user.Userid))
+        string username = request.Username.Trim();
+        if (await UsernameTaken(username, user.Userid))
             return BadRequest(new { status = "Error", message = "Username already exists", data = (object)null });
 
         // An owner may move a user between branches of their outlet; a branch head cannot.
-        user.Branchid = tenant.IsOutletOwner ? tenant.ResolveBranch(user.Branchid ?? existing.Branchid) : existing.Branchid;
-        user.Outletid = existing.Outletid ?? tenant.OutletId;
-        _context.Entry(user).State = EntityState.Modified;
+        user.Branchid = tenant.IsOutletOwner ? tenant.ResolveBranch(request.Branchid ?? user.Branchid) : user.Branchid;
+        user.Outletid ??= tenant.OutletId;
+        user.Username = username;
+        user.Status = request.Status;
+        if (!string.IsNullOrWhiteSpace(request.Password))
+            user.Password = PasswordSecurity.Hash(request.Password);
         try
         {
             await _context.SaveChangesAsync();

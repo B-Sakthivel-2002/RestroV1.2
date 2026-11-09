@@ -82,6 +82,7 @@ builder.Services.AddSingleton<EmailService>();
 builder.Services.AddScoped<SeatingService>();
 builder.Services.AddScoped<KotPrintService>();
 builder.Services.AddSingleton<PrintQueue>();
+builder.Services.AddSingleton<LoginEncryption>();
 // KOT / bill printing off the request: CreateOrder and CreateBill only queue the ticket.
 builder.Services.AddScoped<BillPrintService>();
 builder.Services.AddSingleton<BackgroundPrinter>();
@@ -128,6 +129,14 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+// Any password still stored in plain text is hashed once, before the API takes requests.
+using (var scope = app.Services.CreateScope())
+{
+    await PasswordSecurity.HashStoredPasswordsAsync(
+        scope.ServiceProvider.GetRequiredService<HotelContext>(),
+        scope.ServiceProvider.GetRequiredService<ILogger<Program>>());
+}
 
 app.UseSwagger();
 app.UseSwaggerUI();

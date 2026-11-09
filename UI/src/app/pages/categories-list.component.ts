@@ -10,7 +10,6 @@ import { inject } from '@angular/core';
 import { AuthService } from '@appservices/auth.service';
 import { BranchSelectComponent } from '../shared/component/branch-select.component';
 import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
-import { isExpressStallType } from '../core/constants/Appsettings';
 
 
 @Component({
@@ -118,7 +117,7 @@ import { isExpressStallType } from '../core/constants/Appsettings';
                     />
                   </div>
                 </div>
-              @if(hasExpressStall){
+              @if(formBranchHasStall){
               <div class="col-md-6">
                   <div class="form-check form-switch">
                     <label class="form-check-label me-2" for="expressstall">
@@ -164,7 +163,14 @@ export class CategoriesListComponent {
   categoiresFormTitle:String ='Create';
   categoryModalRef?: BsModalRef;
   branchList:any[]=[];
-  hasExpressStall = false;
+  // Column in the list: any branch shown here runs a stall.
+  get hasExpressStall(): boolean {
+    return (this.branchList || []).some((b: any) => b.expressstall);
+  }
+  // Switch in the form: only for the branch this category belongs to.
+  get formBranchHasStall(): boolean {
+    return (this.branchList || []).some((b: any) => b.branchid == this.saveBranchId && b.expressstall);
+  }
   initialCategoryForm ={
       categoryid:0,
       categoryname:'',
@@ -180,12 +186,6 @@ export class CategoriesListComponent {
     
     this.getCategoriesList();
     this.getBranchList();
-    // the Express Stall flag only matters when the outlet has the Express Stall order type
-    this.query.getOrderTypes().subscribe({
-      next: (res: any) => this.hasExpressStall = (res.data || []).some((ot: any) => isExpressStallType(ot)),
-      error: () => {}
-    });
-
     this.categoiresForm = this.fb.group({	
       categoryid:[this.initialCategoryForm.categoryid],
       categoryname:[this.initialCategoryForm.categoryname,Validators.required],
@@ -284,6 +284,7 @@ export class CategoriesListComponent {
       const localcategoiresForm = this.categoriesList.filter((x: any) => x.categoryid === inputId);
   
       if (localcategoiresForm && localcategoiresForm.length > 0) {
+        this.saveBranchId = localcategoiresForm[0].branchid;
         this.categoiresForm.patchValue({
           categoryid: localcategoiresForm[0].categoryid,
           categoryname: localcategoiresForm[0].categoryname,

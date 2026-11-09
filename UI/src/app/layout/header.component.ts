@@ -119,13 +119,13 @@ export class HeaderComponent implements OnInit {
     });
   }
 
-  // Shown next to Take away only when the outlet has an active "Express Stall" order type.
+  // Shown next to Take away only when the user's branch has Express Stall switched on.
   addExpressStallMenu() {
     const takeAway = this.menuList.findIndex((m: any) => m.name === 'Take away');
     if (takeAway < 0) return;
     this.queryService.getOrderTypes().subscribe({
       next: (res: any) => {
-        const stall = (res.data || []).find((ot: any) => isExpressStallType(ot));
+        const stall = res.expressStall ? (res.data || []).find((ot: any) => isExpressStallType(ot)) : null;
         if (!stall || this.menuList.some((m: any) => m.name === 'Express Stall')) return;
         this.menuList = [
           ...this.menuList.slice(0, takeAway + 1),

@@ -1,5 +1,5 @@
 import { Injectable, input } from '@angular/core';
-import { catchError, from, Observable, of, tap,map, shareReplay } from 'rxjs';
+import { catchError, from, Observable, of, tap,map, shareReplay, switchMap } from 'rxjs';
 import { captainMenuList, chefMenuList, menuList } from '../constants/Appsettings';
 // import { AppSettings.apiUrl } from '../constants/Appsettings';
 
@@ -28,7 +28,11 @@ private activeFloorsList$:any ;
 private branchDirectory$:any;
 
   // Cached lists belong to the logged-in user's branch; drop them whenever a (different) user logs in.
+  // Last Dine-in screen data, shown at once when coming back while the fresh data loads.
+  dineinSnapshot: { floors: any[], tables: any[] } | null = null;
+
   clearCache(): void {
+    this.dineinSnapshot = null;
     this.getCustomer$ = undefined;
     this.getFoodMenuList$ = undefined;
     this.getDiscountsList$ = undefined;
@@ -67,14 +71,12 @@ private branchDirectory$:any;
 
      console.log('postCHeckloign');
 
-    let request ={
-      username :  params.username,
-      password: params.password
-    }
-
-    return this.http.post(AppSettings.apiUrl + 'auth/Login',request,{
+    // The password leaves the browser encrypted, with a key and one-time code issued for this attempt.
+    return this.http.get(AppSettings.apiUrl + 'auth/login-key').pipe(
+      switchMap((key:any)=> from(this.encryptPassword(params.password, key.data.publicKey, key.data.nonce))),
+      switchMap((password:string)=> this.http.post(AppSettings.apiUrl + 'auth/Login',{ username: params.username, password },{
            headers:this.customHeaders
-    },).pipe(
+      })),
       map((response :any)=> {
         // Handle the successful login response
         // Assume the token is part of the response object
@@ -96,6 +98,16 @@ private branchDirectory$:any;
    // let response = checkLogin;
     //console.log(response);
    // return of(response);
+  }
+
+  // RSA-OAEP with node-forge: the browser's own crypto API is not available on plain http LAN addresses.
+  private async encryptPassword(password:string, publicKeyPem:string, nonce:string):Promise<string>{
+    const forge = (await import('node-forge')).default;
+    const encrypted = forge.pki.publicKeyFromPem(publicKeyPem).encrypt(forge.util.encodeUtf8(nonce + ':' + password), 'RSA-OAEP', {
+      md: forge.md.sha256.create(),
+      mgf1: { md: forge.md.sha256.create() },
+    });
+    return forge.util.encode64(encrypted);
   }
 
   getCategories(allBranches: boolean = false):Observable<any>{
@@ -329,6 +341,10 @@ private branchDirectory$:any;
       this.getFloorsList$ = undefined;
       this.activeFloorsList$ = undefined;
     }
+
+  updateBranch(branch:any):Observable<any>{
+    return this.http.post(AppSettings.apiUrl+'Branches/UpdateBranch',branch,{ headers:this.customHeaders });
+  }
 
   getBranchList():Observable<any>{
     console.log('dinein',AppSettings.apiUrl);   
@@ -1073,7 +1089,7 @@ private branchDirectory$:any;
   }
 
   // Bill amounts of the orders on the order screen, calculated by the API.
-  calculateBill(input: { orderTypeId: number | null, orderIds: number[], newLines: { itemId: number, qty: number }[], discountId: number | null, customDiscount: number | null }): Observable<any> {
+  calculateBill(input: { orderIds: number[], discountId: number | null, customDiscount: number | null }): Observable<any> {
     return this.http.post(AppSettings.apiUrl + 'Bill/Calculate', input);
   }
 

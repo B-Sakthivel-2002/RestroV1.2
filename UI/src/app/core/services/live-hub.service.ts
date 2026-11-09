@@ -6,19 +6,25 @@ import { AppSettings } from '../constants/Appsettings';
 export type HubStatus = 'connecting' | 'connected' | 'reconnecting';
 
 // One SignalR connection to the API hub (/kotHub) shared by every screen of the tab.
-// It is opened while at least one screen listens (on()) and closed after the last one leaves,
-// e.g. at logout, so the next login connects with the new user's token. No polling anywhere.
+// It is opened while at least one screen listens (on()) and closed shortly after the last one leaves,
+// e.g. at logout. Moving between screens keeps it. A different user always gets a new connection,
+// because the token decides the connection's branch, role and user groups. No polling anywhere.
 @Injectable({ providedIn: 'root' })
 export class LiveHubService {
 
+  private static readonly CLOSE_DELAY_MS = 1500;
+
   // Current connection state, for "Reconnecting..." hints.
   readonly status$ = new BehaviorSubject<HubStatus>('connecting');
-  // Emits after every (re)connect: events may have been missed, screens should reload once.
+  // Emits when the connection comes back after being lost: events may have been missed.
   readonly resync$ = new Subject<void>();
 
   private connection?: signalR.HubConnection;
+  private connectionToken = '';
+  private connectedBefore = false;
   private listeners = 0;
   private retryTimer: any;
+  private closeTimer: any;
 
   // Server event as an observable; subscribing keeps the connection open.
   on<T = any>(eventName: string): Observable<T> {
@@ -34,8 +40,15 @@ export class LiveHubService {
   }
 
   private acquire(): signalR.HubConnection {
+    clearTimeout(this.closeTimer);
+    const token = localStorage.getItem('authToken') || '';
+    if (this.listeners === 0 && this.connection && this.connectionToken !== token) {
+      this.close();
+    }
     this.listeners++;
     if (!this.connection) {
+      this.connectionToken = token;
+      this.connectedBefore = false;
       this.connection = this.build();
       this.start(this.connection);
     }
@@ -44,13 +57,20 @@ export class LiveHubService {
 
   private release(): void {
     this.listeners = Math.max(0, this.listeners - 1);
-    if (this.listeners === 0 && this.connection) {
-      const old = this.connection;
-      this.connection = undefined;
-      clearTimeout(this.retryTimer);
-      old.stop().catch(() => { });
-      this.status$.next('connecting');
+    if (this.listeners === 0) {
+      // The next screen subscribes right after the old one is destroyed: wait before closing.
+      clearTimeout(this.closeTimer);
+      this.closeTimer = setTimeout(() => this.close(), LiveHubService.CLOSE_DELAY_MS);
     }
+  }
+
+  private close(): void {
+    const old = this.connection;
+    if (!old) return;
+    this.connection = undefined;
+    clearTimeout(this.retryTimer);
+    old.stop().catch(() => { });
+    this.status$.next('connecting');
   }
 
   private build(): signalR.HubConnection {
@@ -76,12 +96,13 @@ export class LiveHubService {
   }
 
   private start(connection: signalR.HubConnection): void {
-    if (this.connection !== connection) return;
+    if (this.connection !== connection || connection.state !== signalR.HubConnectionState.Disconnected) return;
     this.status$.next('connecting');
     connection.start()
       .then(() => {
         this.status$.next('connected');
-        this.resync$.next();
+        if (this.connectedBefore) this.resync$.next();
+        this.connectedBefore = true;
       })
       .catch(() => {
         if (this.connection !== connection) return;

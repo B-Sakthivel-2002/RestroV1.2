@@ -11,14 +11,6 @@ public class BillingSettings
     public bool TaxInclusive { get; set; } = true;
 }
 
-public class BillCalcLine
-{
-    public int Itemid { get; set; }
-    public int Qty { get; set; }
-    public double Price { get; set; }
-    public double Sumofprice { get; set; }
-}
-
 public class BillCalcResult
 {
     public double SubTotal { get; set; }
@@ -31,6 +23,17 @@ public class BillCalcResult
     public List<object> Taxes { get; set; } = new();
     public List<object> ExtraCharges { get; set; } = new();
     public int? DiscountId { get; set; }
+
+    // Amounts as the order screen reads them.
+    public object ToResponse() => new
+    {
+        subtotal = SubTotal,
+        tax = Tax,
+        discount = Discount,
+        extraamount = ExtraAmount,
+        total = Total,
+        taxinclusive = TaxInclusive
+    };
 }
 
 // Bill totals, calculated on the server. This is the order screen's former calculatetotalprice()
@@ -49,22 +52,6 @@ public class BillCalculator
     {
         _context = context;
         Settings = configuration.GetSection("BillingSettings").Get<BillingSettings>() ?? new BillingSettings();
-    }
-
-    // Lines of an order: price from the item master (the same Defaultprice the menu shows),
-    // sumofprice = qty x price.
-    public async Task<List<BillCalcLine>> PriceLinesAsync(IEnumerable<(int ItemId, int Qty)> lines, int? branchId)
-    {
-        var list = lines.ToList();
-        var ids = list.Select(l => l.ItemId).Distinct().ToList();
-        var prices = await _context.Items.AsNoTracking()
-            .Where(i => ids.Contains(i.Itemid) && (branchId == null || i.Branchid == branchId))
-            .ToDictionaryAsync(i => i.Itemid, i => (double)(i.Defaultprice ?? 0m));
-        return list.Select(l =>
-        {
-            double price = prices.GetValueOrDefault(l.ItemId);
-            return new BillCalcLine { Itemid = l.ItemId, Qty = l.Qty, Price = price, Sumofprice = ToFixed(l.Qty * price, 2) };
-        }).ToList();
     }
 
     // orderTotals: the totalprice of every order on the bill. orderTypeId: picks the extra charges.

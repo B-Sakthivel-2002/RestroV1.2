@@ -67,6 +67,10 @@ public class OrdersController : ControllerBase
         // An order taken on a merged table belongs to the main table of the merge.
         orderDto.TableID = (await _seating.ResolveTableIdAsync(orderDto.TableID)).GetValueOrDefault();
 
+        var orderTypeName = await _context.Ordertypes.AsNoTracking().Where(t => t.Ordertypeid == orderDto.OrderTypeID).Select(t => t.Ordertypename).FirstOrDefaultAsync();
+        if (ExpressStall.IsOrderType(orderTypeName) && !await _context.Branches.AnyAsync(b => b.Branchid == branchid && b.Expressstall))
+            return BadRequest(new { status = "Error", message = "Express Stall is not enabled for this branch", data = (object)null });
+
         string? invalid = await ValidateOrderRefs(tenant, orderDto);
         if (invalid != null)
             return BadRequest(new { status = "Error", message = invalid, data = (object)null });
@@ -125,11 +129,6 @@ public class OrdersController : ControllerBase
             // =============================
             // SignalR notification
             // =============================
-            var orderTypeName = await _context.Ordertypes
-                .Where(ot => ot.Ordertypeid == order.Ordertypeid)
-                .Select(ot => ot.Ordertypename)
-                .FirstOrDefaultAsync();
-
             var captainName = username ?? await _context.Users
                 .Where(u => u.Userid == userid)
                 .Select(u => u.Username)
@@ -254,13 +253,22 @@ public class OrdersController : ControllerBase
                 message = printFailed ? $"Order created successfully. Kitchen printing failed: {printError}" : "Order created successfully. KOT sent to the kitchen printer.",
                 printStatus = printFailed ? "Failed" : "Queued",
                 printResults,
-                data = order
+                data = order,
+                totals = await TotalsAsync(new[] { order.Orderid })
             });
         }
         catch (Exception ex)
         {
             return StatusCode(500, new { status = "Error", message = ex.GetBaseException().Message, data = (object)null });
         }
+    }
+
+    // Sub total, tax, extra charges and total of saved orders: the same calculation CreateBill saves.
+    private async Task<object> TotalsAsync(IReadOnlyCollection<int> orderIds)
+    {
+        int? branchId = await _context.Orders.AsNoTracking().Where(o => orderIds.Contains(o.Orderid)).Select(o => o.Branchid).FirstOrDefaultAsync();
+        var result = await _calc.CalculateForOrdersAsync(branchId.GetValueOrDefault(), orderIds, null, null);
+        return result.ToResponse();
     }
 
     // Item master price (the menu's Defaultprice) of each item.
@@ -410,7 +418,7 @@ public class OrdersController : ControllerBase
         if (list == null || !list.Any())
             return Ok(new { status = "Succcess", message = "No orders found for the given order type.", data = (object)null });
 
-        return Ok(new { status = "Success", message = "Orders retrieved successfully.", data = list });
+        return Ok(new { status = "Success", message = "Orders retrieved successfully.", data = list, totals = await TotalsAsync(list.Select(o => o.Orderid).ToList()) });
     }
 
     [HttpGet("{id}")]
@@ -474,7 +482,7 @@ public class OrdersController : ControllerBase
         if (list == null || !list.Any())
             return Ok(new { status = "Error", message = $"No active orders found for Table ID: {tableId}", data = (object)null });
 
-        return Ok(new { status = "Success", message = "Orders retrieved successfully", data = list   , billDetails = billDetails });
+        return Ok(new { status = "Success", message = "Orders retrieved successfully", data = list   , billDetails = billDetails, totals = await TotalsAsync(list.Select(o => o.Orderid).ToList()) });
     }
 
     [HttpGet("GetOrders")]

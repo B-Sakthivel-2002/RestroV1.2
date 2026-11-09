@@ -92,8 +92,6 @@ export class LoginComponent implements OnInit {
 
     this.stateService.setLoadingState(true);
 
-    console.log('checking',this.postData,this.postData?.invalid);
-
     if(this.postData?.invalid){
       return;
     }

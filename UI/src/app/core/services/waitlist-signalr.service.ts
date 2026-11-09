@@ -9,8 +9,8 @@ export type { HubStatus } from './live-hub.service';
 const WAITLIST_CHANGED = 'WaitlistChanged';
 
 export interface WaitlistHubEvent {
-  // 'changed': the given branch changed. 'resync': the connection came back, changes may have been missed.
-  kind: 'changed' | 'resync' | 'status';
+  // 'changed': the given branch changed. 'status': the connection state changed.
+  kind: 'changed' | 'status';
   branchId?: number | null;
   status?: HubStatus;
 }
@@ -24,7 +24,6 @@ export class WaitlistSignalrService {
   constructor(hub: LiveHubService) {
     this.events$ = merge(
       hub.on<any>(WAITLIST_CHANGED).pipe(map(p => ({ kind: 'changed', branchId: p?.branchId ?? null } as WaitlistHubEvent))),
-      hub.resync$.pipe(map(() => ({ kind: 'resync' } as WaitlistHubEvent))),
       hub.status$.pipe(map(status => ({ kind: 'status', status } as WaitlistHubEvent)))
     );
   }

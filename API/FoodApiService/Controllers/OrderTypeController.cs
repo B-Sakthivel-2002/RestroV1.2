@@ -21,7 +21,18 @@ public class OrderTypeController : ControllerBase
     public async Task<IActionResult> GetOrderTypes()
     {
         var tenant = await _tenant.GetAsync();
-        return Ok(new { status = "Success", message = "Order types fetched successfully", data = await _context.Ordertypes.ForOutlet(tenant).ToListAsync() });
+        var stallBranches = await _context.Branches.AsNoTracking()
+            .Where(b => tenant.BranchIds.Contains(b.Branchid) && b.Expressstall)
+            .Select(b => b.Branchid)
+            .ToListAsync();
+
+        // The list also feeds reports and masters, so an owner sees the type when any of their branches runs a stall.
+        // expressStall is the caller's own branch: it decides whether the stall menu and screen appear.
+        var types = await _context.Ordertypes.ForOutlet(tenant).ToListAsync();
+        if (stallBranches.Count == 0)
+            types = types.Where(t => !ExpressStall.IsOrderType(t.Ordertypename)).ToList();
+
+        return Ok(new { status = "Success", message = "Order types fetched successfully", data = types, expressStall = stallBranches.Contains(tenant.BranchId) });
     }
 
     [HttpGet("{id}")]

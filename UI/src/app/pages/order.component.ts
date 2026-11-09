@@ -759,6 +759,9 @@ export class OrderComponent implements OnInit {
   phoneMatches: any[] = [];
   private phoneLookup$ = new Subject<string>();
   private calc$ = new Subject<void>();
+  branchHasStall = false;
+  // Amounts the API returned with the saved orders on screen.
+  private savedTotals: any = null;
   private lockedCustomerPhone: any = null;
   selectedwaiterid: any = 0;
   selectedordertypeid: any = 1;
@@ -999,11 +1002,17 @@ width: 150px;
   ngOnInit(): void {
     this.calc$
       .pipe(
-        debounceTime(150),
         switchMap(() => this.query.calculateBill(this.buildCalcRequest()).pipe(catchError(() => of(null)))),
         takeUntil(this.destroy$),
       )
-      .subscribe((res: any) => this.applyCalc(res?.data));
+      .subscribe((res: any) => {
+        if (this.hasUnsentOrder()) return; // items were added meanwhile: the estimate is showing
+        if (!res?.data) {
+          this.alertService.showAlert('Error', 'Could not calculate the discount. Please choose it again.');
+          return;
+        }
+        this.applyCalc(res.data);
+      });
     this.phoneLookup$
       .pipe(
         debounceTime(400),
@@ -1216,6 +1225,7 @@ width: 150px;
     this.query.getOrderTypes().subscribe({
       next: (res: any) => {
         this.orderTypeList = res.data ? res.data : [];
+        this.branchHasStall = !!res.expressStall;
         console.log(res, 'res');
         this.applyMenuFilter();
       },
@@ -1274,14 +1284,13 @@ width: 150px;
   }
 
   get isExpressStall(): boolean {
-    return isExpressStallType(this.orderTypeList.find((x: any) => x.ordertypeid == this.typeId));
+    return this.branchHasStall && isExpressStallType(this.orderTypeList.find((x: any) => x.ordertypeid == this.typeId));
   }
 
   // Categories marked "Express Stall" in the category master belong to the stall only: the stall screen
-  // lists just those, the other order screens leave them out. Without a stall order type the flag is ignored.
+  // lists just those, the other order screens leave them out. In a branch without Express Stall the flag is ignored.
   applyMenuFilter() {
-    const stallEnabled = this.orderTypeList.some((x: any) => isExpressStallType(x));
-    this.foodMenuList = !stallEnabled
+    this.foodMenuList = !this.branchHasStall
       ? this.allFoodMenuList
       : this.allFoodMenuList.filter((x: any) => !!x.expressstall === this.isExpressStall);
     this.foodMenuSearchList = this.foodMenuList
@@ -1333,6 +1342,7 @@ width: 150px;
       next: async (res: any) => {
         console.log(res, 'getExtra');
         this.extraList = res.data ? res.data : [];
+        this.calculatetotalprice();
       },
       error: (err: any) => {},
     });
@@ -1703,6 +1713,7 @@ width: 150px;
   }
 
   resetPostBill() {
+    this.savedTotals = null;
     this.postBill = {
       ...this.defaultPostBill,
       orders: [],
@@ -1748,6 +1759,7 @@ width: 150px;
 
     localGetOrder.subscribe({
       next: (res: any) => {
+        this.savedTotals = res.totals ?? null;
         if (res.status == 'Success') {
           console.log(res, 'get-order-by-table--');
           this.postBill.orders = res.data.map((x: any) => {
@@ -1853,59 +1865,138 @@ width: 150px;
     this.getOrderByTable(this.tableId, this.typeId);
   }
 
-  // Sub total, tax, discount, extra charges and total are calculated by the API (Bill/Calculate,
-  // tax inclusive / exclusive from the API's BillingSettings). Many quick changes (adding items) end in
-  // one request; only the latest answer is applied.
+  // What the totals panel shows:
+  // - items not sent yet: an estimate worked out here, for display only. The API calculates the real
+  //   amounts at CreateOrder / CreateBill.
+  // - saved orders only: the amounts the API returned with them. Choosing a discount is the one
+  //   Bill/Calculate call, so Settle shows the amount to collect.
   async calculatetotalprice() {
-    this.calc$.next();
+    if (this.hasUnsentOrder() || !this.savedTotals) {
+      this.previewTotals();
+    } else if (this.postBill.discountFlag) {
+      this.calc$.next();
+    } else {
+      this.applyCalc(this.savedTotals);
+    }
+  }
+
+  private hasUnsentOrder(): boolean {
+    return (this.postBill.orders || []).some((o: any) => !o.orderid);
+  }
+
+  // Same steps as the API's BillCalculator.Compute; config.json "taxInclusive" must match the API's
+  // BillingSettings:TaxInclusive.
+  private previewTotals() {
+    const inclusive = AppSettings.taxInclusive;
+    let localtotalprice = (this.postBill.orders || []).reduce(
+      (sum: number, order: any) => sum + (Number(order.totalprice) || 0),
+      0,
+    );
+    this.postBill.subTotalAmount = parseFloat(localtotalprice.toFixed(2));
+    this.postBill.tax = 0;
+    this.postBill.extraAmount = 0;
+
+    if (this.taxList.length && localtotalprice) {
+      let localTaxAmount = 0;
+      this.taxList.forEach((x: any) => {
+        const inRange = x.taxrangestatus
+          ? x.taxfrom <= localtotalprice && x.taxto >= localtotalprice
+          : true;
+        if (!inRange) return;
+        let taxAmount = 0;
+        if (x.taxtype === 'percentage') {
+          taxAmount = inclusive
+            ? localtotalprice - localtotalprice / (1 + x.taxrate / 100)
+            : (localtotalprice * x.taxrate) / 100;
+        } else if (x.taxtype === 'flat') {
+          taxAmount = x.taxrate;
+        }
+        if (taxAmount) {
+          if (!inclusive) localtotalprice += Number(taxAmount) || 0;
+          localTaxAmount += Number(taxAmount) || 0;
+        }
+      });
+      this.postBill.tax = parseFloat(localTaxAmount.toFixed(2));
+      if (inclusive) {
+        this.postBill.subTotalAmount = parseFloat((localtotalprice - localTaxAmount).toFixed(2));
+      }
+    }
+
+    const discountObject = this.postBill.discountFlag ? this.discountList[this.postBill.discountIndex] : null;
+    if (discountObject) {
+      let discountAmount = 0;
+      if (discountObject.discountname == 'customize') {
+        discountAmount = Number(this.selectDiscount.value) || 0;
+      } else {
+        const inRange = discountObject.discountrangestatus
+          ? discountObject.discountfrom <= localtotalprice && discountObject.discountto >= localtotalprice
+          : true;
+        if (inRange) {
+          if (discountObject.discounttype == 'percentage') {
+            discountAmount = (localtotalprice * discountObject.discountrate) / 100;
+          } else if (discountObject.discounttype == 'flat') {
+            discountAmount = discountObject.discountrate;
+          }
+        }
+      }
+      localtotalprice -= Number(discountAmount) || 0;
+      this.postBill.discount = parseFloat(Number(discountAmount).toFixed(2));
+      this.postBill.discountList = discountObject;
+    }
+
+    if (this.extraList.length && localtotalprice) {
+      let localextraAmount = 0;
+      this.extraList.forEach((x: any) => {
+        if (this.typeId != x.ordertypeid) return;
+        const inRange = x.extrachargestatus
+          ? x.extrachargefrom <= localtotalprice && x.extrachargeto >= localtotalprice
+          : true;
+        if (!inRange) return;
+        let extraAmount = 0;
+        if (x.extrachargetype === 'percentage') {
+          extraAmount = (localtotalprice * x.extrachargerate) / 100;
+        } else if (x.extrachargetype === 'flat') {
+          extraAmount = x.extrachargerate;
+        }
+        if (extraAmount) {
+          localtotalprice += Number(extraAmount) || 0;
+          localextraAmount += Number(extraAmount) || 0;
+        }
+      });
+      this.postBill.extraAmount = parseFloat(localextraAmount.toFixed(2));
+    }
+
+    const total = parseFloat(localtotalprice.toFixed());
+    this.postBill.taxList = this.taxList;
+    this.postBill.totalAmount = total;
+    this.postBill.billAmount = total;
+    this.postBill.paidamount = total;
+    this.changeDetectRef.markForCheck();
   }
 
   private buildCalcRequest() {
-    const orders: any[] = Array.isArray(this.postBill.orders) ? this.postBill.orders : [];
     const request: any = {
-      orderTypeId: Number(this.typeId) || null,
-      orderIds: orders.filter((o: any) => o.orderid > 0).map((o: any) => o.orderid),
-      newLines: orders
-        .filter((o: any) => !o.orderid)
-        .flatMap((o: any) => (o.orderdetail || []).map((d: any) => ({ itemId: d.itemid, qty: d.qty }))),
+      orderIds: (this.postBill.orders || []).filter((o: any) => o.orderid > 0).map((o: any) => o.orderid),
       discountId: null,
       customDiscount: null,
     };
-    if (this.postBill.discountFlag) {
-      const discountObject = this.discountList[this.postBill.discountIndex];
-      if (discountObject) {
-        request.discountId = discountObject.discountid;
-        if (discountObject.discountname == 'customize') {
-          request.customDiscount = Number(this.selectDiscount.value) || 0;
-        }
+    const discountObject = this.discountList[this.postBill.discountIndex];
+    if (discountObject) {
+      request.discountId = discountObject.discountid;
+      if (discountObject.discountname == 'customize') {
+        request.customDiscount = Number(this.selectDiscount.value) || 0;
       }
     }
     return request;
   }
 
   private applyCalc(data: any) {
-    if (!data) return;
     this.postBill.subTotalAmount = data.subtotal;
     this.postBill.tax = data.tax;
     this.postBill.extraAmount = data.extraamount;
     if (this.postBill.discountFlag) {
       this.postBill.discount = data.discount;
       this.postBill.discountList = this.discountList[this.postBill.discountIndex];
-    }
-    // The unsent order's lines show the server's prices and amounts.
-    const unsent = (this.postBill.orders || []).find((o: any) => !o.orderid);
-    if (unsent && Array.isArray(data.newlines)) {
-      let allMatched = true;
-      for (const line of unsent.orderdetail || []) {
-        const priced = data.newlines.find((l: any) => l.itemid === line.itemid && l.qty === line.qty);
-        if (priced) {
-          line.price = priced.price;
-          line.sumofprice = priced.sumofprice;
-        } else {
-          allMatched = false;
-        }
-      }
-      if (allMatched) unsent.totalprice = data.newordertotal;
     }
     this.postBill.taxList = this.taxList;
     this.postBill.totalAmount = data.total;

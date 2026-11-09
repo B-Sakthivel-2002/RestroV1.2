@@ -12,7 +12,7 @@ import { Subscription, debounceTime, filter, merge } from 'rxjs';
 import { BranchSelectComponent } from '../shared/component/branch-select.component';
 
 // Captain's live screen: Queue / Tables / History tabs over all floors of the branch.
-// Refreshes itself every few seconds, so several captains can work on it at once.
+// Updates live over SignalR, so several captains can work on it at once.
 @Component({
   selector: 'app-waitlist',
   standalone: true,
@@ -338,7 +338,7 @@ export class WaitlistComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.refresh();
     this.live = merge(
-      this.waitlistHub.events$.pipe(filter(e => e.kind === 'resync' || (e.kind === 'changed' && (e.branchId == null || e.branchId === this.summary?.branchId)))),
+      this.waitlistHub.events$.pipe(filter(e => e.kind === 'changed' && (e.branchId == null || e.branchId === this.summary?.branchId))),
       this.hub.on('OrderUpdated'),
       this.hub.on('OrderSettled'),
       this.hub.on('TableStatus')

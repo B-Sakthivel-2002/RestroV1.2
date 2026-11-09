@@ -3,7 +3,7 @@ import { QueryService } from '@appservices/query.service';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { StateService } from '@appservices/state.service';
-import { finalize } from 'rxjs';
+import { finalize, forkJoin } from 'rxjs';
 
 @Component({
   selector: 'app-dinein',
@@ -103,46 +103,38 @@ import { finalize } from 'rxjs';
 })
 export class DineinComponent implements OnInit{
 
+  private static readonly LOADER_DELAY_MS = 300;
+
   constructor(private stateService:StateService,private query:QueryService,private router:Router){}
 
   floorSource:any =[];
   tablesSource:any=[];
 
   ngOnInit(): void {
-    this.getFloorsList();
-    this.getTables();
+    this.loadTables();
   }
 
-
-
-  getFloorsList(){
-    this.query.getActiveFloors().subscribe({
-      next:((res:any)=>{
-        console.log(res,'dine-in status');
-        // if(res.status=='success'){
-        //   this.floorSource=  res.floors;
-        // }
-
-        this.floorSource = res.data;
-      }),
-      error:((err:any)=>{
-
-      })
-    })
-  }
-
-
-  getTables(){
-     this.stateService.setLoadingState(true); 
-    this.query.getActiveTables().pipe(
+  // Floors and tables are drawn together. Coming back to this screen shows the last data at once and
+  // swaps in the fresh data; the full-screen loader appears only when loading is actually slow.
+  loadTables(){
+    const last = this.query.dineinSnapshot;
+    if(last){
+      this.floorSource = last.floors;
+      this.tablesSource = last.tables;
+    }
+    const slowLoader = setTimeout(()=> this.stateService.setLoadingState(true), DineinComponent.LOADER_DELAY_MS);
+    forkJoin({ floors: this.query.getActiveFloors(), tables: this.query.getActiveTables() }).pipe(
       finalize(()=>{
-         this.stateService.setLoadingState(false); 
+        clearTimeout(slowLoader);
+        this.stateService.setLoadingState(false);
       })
     ).subscribe({
       next:(res:any)=>{
-       this.tablesSource = res.data || [];     
+        this.floorSource = res.floors?.data || [];
+        this.tablesSource = res.tables?.data || [];
+        this.query.dineinSnapshot = { floors: this.floorSource, tables: this.tablesSource };
       },
-      error:(err:any)=>{   
+      error:(err:any)=>{
       }
     })
   }

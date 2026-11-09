@@ -114,6 +114,7 @@ public class HotelContext : DbContext
             entity.Property(e => e.Website).HasMaxLength(100).HasColumnName("website");
             entity.Property(e => e.Outletid).HasColumnName("outletid");
             entity.Property(e => e.Code).HasMaxLength(20).HasColumnName("code");
+            entity.Property(e => e.Expressstall).HasColumnName("expressstall");
             entity.HasOne(d => d.Outlet).WithMany(p => p.Branches).HasForeignKey(d => d.Outletid).HasConstraintName("fk_branch_outlet");
         });
 

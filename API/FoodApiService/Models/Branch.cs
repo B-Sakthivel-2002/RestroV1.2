@@ -31,6 +31,9 @@ public class Branch
 
     public string? Code { get; set; }
 
+    // Express Stall is available in this branch.
+    public bool Expressstall { get; set; }
+
     [JsonIgnore]
     public virtual Outlet? Outlet { get; set; }
 }

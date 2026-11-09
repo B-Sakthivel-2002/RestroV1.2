@@ -12,8 +12,8 @@ export class AppSettings {
     static taxInclusive = true;
 }
 
-// Express Stall is not a built-in order type: an outlet that runs a stall adds an active order type
-// with this name in the Orders Type master, and the menu entry and stall order screen appear.
+// Express Stall orders use the order type with this name. Whether the menu entry and stall screen
+// appear depends on the branch: branch.expressstall, returned as expressStall with the order types.
 export const EXPRESS_STALL_NAME = 'express stall';
 export function isExpressStallType(ot: any): boolean {
   return !!ot && ot.status !== false && (ot.ordertypename || '').trim().toLowerCase() === EXPRESS_STALL_NAME;

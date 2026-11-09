@@ -36,61 +36,29 @@ public class BillController : ControllerBase
         _seating = seating;
     }
 
-    public class CalcLineRequest
-    {
-        public int ItemId { get; set; }
-        public int Qty { get; set; }
-    }
-
     public class CalcRequest
     {
-        public int? OrderTypeId { get; set; }
-        // Orders already sent to the kitchen (their saved totals are used).
+        // Saved orders on the bill.
         public List<int> OrderIds { get; set; } = new();
-        // Lines of the order not sent yet (priced from the item master).
-        public List<CalcLineRequest> NewLines { get; set; } = new();
         public int? DiscountId { get; set; }
         // Amount typed for the "customize" discount.
         public double? CustomDiscount { get; set; }
     }
 
-    // Order screen: sub total, tax, discount, extra charges and total of the orders on screen,
-    // calculated here (no maths in the browser). Same result CreateBill saves.
+    // Called only when a discount is chosen on saved orders, so Settle shows the amount to collect.
+    // Same result CreateBill saves. Items not sent yet are never priced here.
     [HttpPost("Calculate")]
     public async Task<IActionResult> Calculate([FromBody] CalcRequest request)
     {
         var tenant = await _tenant.GetAsync();
         var ids = (request.OrderIds ?? new()).Distinct().ToList();
-        var orders = await _context.Orders.ForBranch(tenant).AsNoTracking().Where(o => ids.Contains(o.Orderid))
-            .Select(o => new { o.Orderid, o.Totalprice }).ToListAsync();
-        if (orders.Count != ids.Count)
+        var branches = await _context.Orders.ForBranch(tenant).AsNoTracking().Where(o => ids.Contains(o.Orderid))
+            .Select(o => o.Branchid).ToListAsync();
+        if (ids.Count == 0 || branches.Count != ids.Count)
             return NotFound(new { status = "Error", message = "One or more orders not found" });
 
-        var lines = await _calc.PriceLinesAsync((request.NewLines ?? new()).Where(l => l.Qty > 0).Select(l => (l.ItemId, l.Qty)), tenant.BranchId);
-        double newOrderTotal = BillCalculator.ToFixed(lines.Sum(l => l.Sumofprice), 2);
-        // Same order as the screen lists them: saved orders, then the new one.
-        var totals = ids.Select(id => (double)(orders.First(o => o.Orderid == id).Totalprice ?? 0m)).ToList();
-        if (lines.Count > 0)
-            totals.Add(newOrderTotal);
-
-        var result = await _calc.CalculateAsync(tenant.BranchId, totals, request.OrderTypeId, request.DiscountId, request.CustomDiscount);
-        return Ok(new
-        {
-            status = "Success",
-            data = new
-            {
-                subtotal = result.SubTotal,
-                tax = result.Tax,
-                discount = result.Discount,
-                extraamount = result.ExtraAmount,
-                total = result.Total,
-                taxinclusive = result.TaxInclusive,
-                taxes = result.Taxes,
-                extracharges = result.ExtraCharges,
-                newlines = lines.Select(l => new { itemid = l.Itemid, qty = l.Qty, price = l.Price, sumofprice = l.Sumofprice }),
-                newordertotal = newOrderTotal
-            }
-        });
+        var result = await _calc.CalculateForOrdersAsync(branches[0].GetValueOrDefault(), ids, request.DiscountId, request.CustomDiscount);
+        return Ok(new { status = "Success", data = result.ToResponse() });
     }
 
     [HttpPost("CreateBill")]

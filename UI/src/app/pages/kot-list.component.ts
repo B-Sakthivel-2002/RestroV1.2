@@ -7,7 +7,6 @@ import { debounceTime, finalize, merge, Observable, Subscription } from 'rxjs';
 import { AlertService } from '@appservices/alert.service';
 import { StateService } from '@appservices/state.service';
 import { ActivatedRoute, Router } from '@angular/router';
-import { KotSignalrService } from '@appservices/kot-signalr.service';
 import { LiveHubService } from '@appservices/live-hub.service';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
@@ -314,11 +313,6 @@ orderList:Array<any>=[];
       this.isCaptain = true;
     }
 
-    //     this.signalR.startConnection();
-    // this.signalR.onOrderUpdated((orderId:number) => {
-    // //  this.getOrderReport();  
-    // });
-
     // Live: new KOT, edit, cancel, ready / picked up (from any device) reload the list. No polling.
     this.liveSub = merge(this.hub.on('OrderUpdated'), this.hub.on('OrderAlert'), this.hub.resync$)
       .pipe(debounceTime(600))
@@ -331,7 +325,7 @@ orderList:Array<any>=[];
     this.liveSub?.unsubscribe();
   }
 
-  constructor(private route:ActivatedRoute,private stateService: StateService ,private changeDetectRef: ChangeDetectorRef,private alertService:AlertService,private query:QueryService,private modalService:BsModalService, private signalR: KotSignalrService, private hub: LiveHubService){}
+  constructor(private route:ActivatedRoute,private stateService: StateService ,private changeDetectRef: ChangeDetectorRef,private alertService:AlertService,private query:QueryService,private modalService:BsModalService, private hub: LiveHubService){}
 
   formatDate(date: Date): string {
   const year = date.getFullYear();

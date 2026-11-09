@@ -135,7 +135,7 @@ export class TokenDisplayComponent implements OnInit, OnDestroy {
     this.hub = this.waitlistHub.events$.subscribe(e => {
       if (e.kind === 'status') {
         this.offline = e.status !== 'connected';
-      } else if (e.kind === 'resync' || e.branchId == null || e.branchId === this.shownBranchId) {
+      } else if (e.branchId == null || e.branchId === this.shownBranchId) {
         this.load();
       }
     });
