@@ -240,6 +240,12 @@ export const routes: Routes = [
       data:{dataRoles:['Admin','SuperAdmin']},
       canActivate: [RoleGuard]
    },{
+      // every role: the theme is a per-device preference
+      path:'settings/theme',
+      loadComponent:()=>import('./pages/theme-settings.component').then(m=>m.ThemeSettingsComponent),
+      data:{dataRoles:['Admin','SuperAdmin','Manager','Captain','Chef','Cheif']},
+      canActivate: [RoleGuard]
+   },{
       path:'settings/mobile-connect',
       loadComponent:()=>import('./pages/mobile-connect.component').then(m=>m.MobileConnectComponent),
       data:{dataRoles:['Admin','SuperAdmin']},

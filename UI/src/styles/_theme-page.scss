@@ -1,0 +1,54 @@
+/* Settings > Theme page (ThemeSettingsComponent). Global because it is over the per-component style budget. */
+.ts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.ts-card { display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden; color: var(--rp-text);
+  background: var(--rp-surface); border: 1px solid var(--rp-border); border-radius: var(--rp-radius-lg); box-shadow: var(--rp-shadow-sm);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+.ts-card:hover { transform: translateY(-3px); box-shadow: var(--rp-shadow-md); }
+.ts-card.selected { border-color: var(--rp-primary); box-shadow: 0 0 0 3px var(--rp-primary-ring), var(--rp-shadow-md); }
+
+/* mini preview */
+.ts-prev { position: relative; height: 150px; display: flex; gap: 6px; padding: 8px; background: var(--p-bg); overflow: hidden; }
+.ts-prev.nav-top { flex-direction: column; }
+.ts-prev.glass { background: radial-gradient(60% 60% at 15% 10%, rgba(255,166,92,.7), transparent 70%),
+  radial-gradient(50% 50% at 90% 90%, rgba(242,107,29,.35), transparent 70%), var(--p-bg); }
+.ts-top { display: flex; align-items: center; gap: 6px; height: 18px; padding: 0 6px; border-radius: 5px; background: var(--p-nav); flex: none; }
+.ts-top i { width: 10px; height: 10px; border-radius: 3px; background: var(--p-primary); margin-right: auto; }
+.ts-top span { width: 18px; height: 5px; border-radius: 3px; background: var(--p-navtext); opacity: .45; }
+.ts-top span.on { background: var(--p-primary); opacity: 1; }
+.ts-side { flex: none; width: 46px; display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; border-radius: 8px; background: var(--p-nav); }
+.nav-rail .ts-side { width: 24px; align-items: center; border-radius: 10px; }
+.ts-side i { width: 12px; height: 12px; border-radius: 4px; background: var(--p-primary); margin-bottom: 4px; }
+.ts-side span { height: 6px; border-radius: 4px; background: var(--p-navtext); opacity: .4; }
+.nav-rail .ts-side span { width: 12px; height: 12px; border-radius: 4px; background: #fff; opacity: .9; }
+.ts-side span.on { background: var(--p-primary); opacity: 1; }
+.ts-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ts-bar { height: 12px; border-radius: 5px; background: var(--p-nav); flex: none; }
+.ts-title { width: 45%; height: 8px; border-radius: 4px; background: var(--p-text); opacity: .8; margin: 2px 0; }
+.ts-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; height: 36px; }
+.ts-kpi { border-radius: 6px; background: var(--p-surface); }
+.ts-panels { flex: 1; display: grid; grid-template-columns: 1.6fr 1fr; gap: 5px; }
+.ts-panels div { border-radius: 6px; background: var(--p-surface); }
+.glass .ts-kpi, .glass .ts-panels div, .glass .ts-side, .glass .ts-bar { border: 1px solid rgba(255,255,255,.8); backdrop-filter: blur(6px); }
+
+.ts-meta { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 4px; }
+.ts-name { display: flex; align-items: center; justify-content: space-between; font-family: var(--rp-font-heading); font-weight: 700; font-size: 16px; }
+.ts-check { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--rp-primary); color: var(--rp-on-primary); font-size: 11px; }
+.ts-tag { font-size: 13px; color: var(--rp-text-muted); }
+.ts-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ts-chips span { font-size: 11.5px; font-weight: 500; padding: 2px 9px; border-radius: 999px; background: var(--rp-neutral-soft); color: var(--rp-text-muted); }
+
+.ts-options { margin-top: 28px; padding: 6px 22px; background: var(--rp-surface); border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-lg); box-shadow: var(--rp-shadow-sm); }
+.ts-opt { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 0; border-bottom: 1px solid var(--rp-border); }
+.ts-opt-head h3 { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+.ts-opt-head p { font-size: 13px; color: var(--rp-text-muted); margin: 0; }
+.ts-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: var(--rp-control-radius); background: var(--rp-neutral-soft); }
+.ts-seg button { border: 0; background: transparent; color: var(--rp-text-muted); font-size: 13px; font-weight: 500; padding: 7px 14px;
+  border-radius: calc(var(--rp-control-radius) - 2px); display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
+.ts-seg button:hover { color: var(--rp-text); }
+.ts-seg button.on { background: var(--rp-surface-solid); color: var(--rp-primary); box-shadow: var(--rp-shadow); font-weight: 600; }
+.ts-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 0; font-size: 13px; color: var(--rp-text-muted); }
+.ts-foot .pi { margin-right: 6px; }
+.ts-foot .btn { margin: 0; }
+@media (max-width: 767.98px) { .ts-seg { width: 100%; } .ts-seg button { flex: 1 1 auto; justify-content: center; } }

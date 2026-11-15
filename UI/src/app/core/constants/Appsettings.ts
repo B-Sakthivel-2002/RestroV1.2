@@ -34,13 +34,13 @@ export const menuList ={
     {
       name: "Take away",
       url: "/order/0/0/2",
-      icon: "pi pi-shop icon",
+      icon: "pi pi-shopping-bag icon",
       submenu: []
     },
     {
       name: "Home Delivery",
       url: "/order/0/0/3",
-      icon: "pi pi-shop icon",
+      icon: "pi pi-truck icon",
       submenu: []
     },
         {
@@ -96,7 +96,7 @@ export const menuList ={
        {
       name: "Master",
       url: "/master",
-      icon: "pi pi-cog  icon",
+      icon: "pi pi-database icon",
       submenu: [
         {
           name: "Waitlist & Tables",
@@ -194,6 +194,11 @@ export const menuList ={
           name: "Mobile App Connect",
           url: "/settings/mobile-connect",
           icon: "preferences"
+        },
+        {
+          name: "Theme",
+          url: "/settings/theme",
+          icon: "pi pi-palette"
         },
         {
 
@@ -330,13 +335,13 @@ export const captainMenuList ={
     {
       name: "Take away",
       url: "/take-away",
-      icon: "pi pi-shop icon",
+      icon: "pi pi-shopping-bag icon",
       submenu: []
     },
     {
       name: "Home Delivery",
       url: "/home-delivery",
-      icon: "pi pi-shop icon",
+      icon: "pi pi-truck icon",
       submenu: []
     },
         {
@@ -348,7 +353,7 @@ export const captainMenuList ={
        {
       name: "Master",
       url: "/master",
-      icon: "pi pi-cog  icon",
+      icon: "pi pi-database icon",
       submenu: [
         {
           name: "Waitlist & Tables",
@@ -389,6 +394,11 @@ export const captainMenuList ={
           icon: "preferences"
         },
         {
+          name: "Theme",
+          url: "/settings/theme",
+          icon: "pi pi-palette"
+        },
+        {
 
           name: "Profile",
           url: "/settings/profile",
@@ -418,7 +428,7 @@ export const chefMenuList ={
        {
       name: "Master",
       url: "/master",
-      icon: "pi pi-cog  icon",
+      icon: "pi pi-database icon",
       submenu: [        
         
         {
@@ -437,6 +447,11 @@ export const chefMenuList ={
           name: "My Orders",
           url: "/order-histroy",
           icon: "preferences"
+        },
+        {
+          name: "Theme",
+          url: "/settings/theme",
+          icon: "pi pi-palette"
         },
         {
 

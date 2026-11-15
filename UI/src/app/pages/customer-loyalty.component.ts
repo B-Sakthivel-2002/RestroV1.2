@@ -209,24 +209,24 @@ import { BranchSelectComponent } from '../shared/component/branch-select.compone
   `,
   styles: `
     .ly-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 8px; }
-    .ly-kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
-    .ly-kpi span { font-size: 12px; color: #6b7280; } .ly-kpi strong { font-size: 1.3rem; }
+    .ly-kpi { background: var(--rp-surface); border: 1px solid var(--rp-border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
+    .ly-kpi span { font-size: 12px; color: var(--rp-text-muted); } .ly-kpi strong { font-size: 1.3rem; }
     .ly-kpis-sm .ly-kpi strong { font-size: 1.05rem; }
-    .ly-note { color: #6b7280; font-size: 13px; }
+    .ly-note { color: var(--rp-text-muted); font-size: 13px; }
     .ly-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; } .ly-filters > * { max-width: 260px; }
     .ly-tier { padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; background: #e5e7eb; }
     .ly-silver { background: #e2e8f0; } .ly-gold { background: #fde68a; } .ly-platinum { background: #c7d2fe; } .ly-bronze { background: #fed7aa; }
     .ly-fav { max-width: 220px; font-size: 13px; }
     .ly-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 1040; }
-    .ly-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(720px, 100vw); background: #fff; z-index: 1050; overflow-y: auto; padding: 16px 20px; box-shadow: -8px 0 24px rgba(0,0,0,.15); }
+    .ly-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(720px, 100vw); background: var(--rp-surface-solid); color: var(--rp-text); z-index: 1050; overflow-y: auto; padding: 16px 20px; box-shadow: -8px 0 24px rgba(0,0,0,.15); }
     .ly-drawer-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
     .ly-drawer h3 { margin: 0; font-size: 1.3rem; } .ly-drawer h4 { font-size: 1rem; margin: 16px 0 8px; }
     .ly-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 13px; }
     .ly-bar-label { width: 110px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ly-bar { flex: 1; height: 10px; background: #f1f5f9; border-radius: 5px; overflow: hidden; } .ly-bar > span { display: block; height: 100%; background: #6366f1; }
+    .ly-bar { flex: 1; height: 10px; background: var(--rp-neutral-soft); border-radius: 5px; overflow: hidden; } .ly-bar > span { display: block; height: 100%; background: var(--rp-primary); }
     .ly-bar-val { width: 110px; flex: none; text-align: right; }
     .ly-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-    .ly-kv { display: flex; justify-content: space-between; font-size: 13px; border-bottom: 1px dashed #e5e7eb; padding: 2px 0; }
+    .ly-kv { display: flex; justify-content: space-between; font-size: 13px; border-bottom: 1px dashed var(--rp-border); padding: 2px 0; }
   `
 })
 export class CustomerLoyaltyComponent implements OnInit {

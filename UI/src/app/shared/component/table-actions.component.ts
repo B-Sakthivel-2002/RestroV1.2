@@ -132,7 +132,7 @@ export type TableActionMode = 'transfer' | 'merge' | 'split';
     .ta-tables { display: flex; flex-wrap: wrap; gap: 8px; }
     .ta-tables .btn { min-width: 72px; }
     .ta-move { display: inline-block; min-width: 44px; text-align: center; font-weight: 700; font-size: .85rem; }
-    .ta-selected td { background: #e8f0fe; }
+    .ta-selected td { background: var(--rp-primary-soft); }
   `
 })
 export class TableActionsComponent implements OnInit {

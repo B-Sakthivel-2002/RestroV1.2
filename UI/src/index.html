@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="classic" data-nav="top" data-density="comfortable" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
   <title>Restaurant</title>
@@ -7,6 +7,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#4361ee">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <script>
+    // Apply the saved theme before the app starts so the first paint is already in it.
+    // Mirrors ThemeService.apply() (src/app/core/services/theme.service.ts) - keep the defaults in step.
+    (function () {
+      var defs = {
+        classic:  { nav: 'top',  density: 'comfortable', dark: false, meta: '#4361ee' },
+        orchid:   { nav: 'side', density: 'comfortable', dark: false, meta: '#7c3aed' },
+        sunrise:  { nav: 'rail', density: 'comfortable', dark: false, meta: '#f26b1d' },
+        midnight: { nav: 'side', density: 'comfortable', dark: false, meta: '#1e1b6e' },
+        carbon:   { nav: 'top',  density: 'compact',     dark: true,  meta: '#0d1117' }
+      };
+      try {
+        var p = JSON.parse(localStorage.getItem('rp-theme') || '{}');
+        var id = defs[p.theme] ? p.theme : 'classic', d = defs[id], r = document.documentElement;
+        var nav = (p.nav && p.nav !== 'auto') ? p.nav : d.nav;
+        r.setAttribute('data-theme', id);
+        r.setAttribute('data-nav', nav);
+        r.setAttribute('data-density', (p.density && p.density !== 'auto') ? p.density : d.density);
+        r.setAttribute('data-bs-theme', d.dark ? 'dark' : 'light');
+        if (nav === 'side' && localStorage.getItem('rp-side-collapsed') === '1') r.setAttribute('data-side-collapsed', '');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', d.meta);
+      } catch (e) { /* storage blocked: default theme */ }
+    })();
+  </script>
 </head>
 <body>
   <app-root></app-root>

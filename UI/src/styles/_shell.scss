@@ -1,0 +1,397 @@
+/* =====================================================================
+   NAVIGATION SHELL
+   Layout follows <html data-nav>:
+     top   menu across the top (header.component's top bar markup)
+     side  full sidebar with labels; folds to the rail when collapsed or on 1200-1439px screens
+     rail  narrow icon rail; groups open as flyouts beside it
+   Under 1200px both side layouts become an overlay drawer opened from the top bar.
+   The rail rules must match HeaderComponent.isRail().
+   Colours come from the --rp-nav-* tokens each theme sets in _themes.scss.
+   ===================================================================== */
+:root{
+  --rp-shell-left: 0px;
+  --rp-side-w: 256px;
+  --rp-rail-w: 92px;
+  --rp-side-inset: 0px;        // gap around a floating sidebar
+  --rp-topbar-inset: 0px;      // gap around a floating top bar
+  --rp-topbar-h: 64px;
+
+  --rp-nav-bg: var(--rp-surface);
+  --rp-nav-text: var(--rp-text-muted);
+  --rp-nav-strong: var(--rp-text);
+  --rp-nav-muted: var(--rp-text-subtle);
+  --rp-nav-hover: var(--rp-surface-alt);
+  --rp-nav-active-bg: var(--rp-primary-soft);
+  --rp-nav-active-text: var(--rp-primary);
+  --rp-nav-indicator: transparent;
+  --rp-nav-border: var(--rp-border);
+  --rp-nav-shadow: none;
+  --rp-nav-radius: 0px;
+  --rp-nav-item-radius: var(--rp-radius);
+  --rp-nav-chip-bg: transparent;   // rail icon background (Sunrise: white squircles)
+
+  --rp-topbar-bg: var(--rp-surface);
+  --rp-topbar-border: var(--rp-border);
+  --rp-topbar-radius: 0px;
+  --rp-topbar-shadow: var(--rp-shadow-sm);
+}
+
+// pages paint their own panels; the page background comes from body (themes may use a gradient)
+.right-side, .full-side, .order-content{ background-color: transparent; }
+
+.rp-shell{
+  min-height: 100vh;
+  padding-left: var(--rp-shell-left);
+  transition: padding-left .2s ease;
+}
+.rp-main{ display: block; min-width: 0; }
+
+:root[data-nav="side"]{
+  --rp-shell-left: calc(var(--rp-side-w) + 2 * var(--rp-side-inset));
+  --rp-header-h: calc(var(--rp-topbar-h) + var(--rp-topbar-inset));
+}
+:root[data-nav="rail"]{
+  --rp-shell-left: calc(var(--rp-rail-w) + 2 * var(--rp-side-inset));
+  --rp-header-h: calc(var(--rp-topbar-h) + var(--rp-topbar-inset));
+}
+
+/* ---------- sidebar ---------- */
+.rp-side{
+  position: fixed;
+  z-index: 1035; // above the sticky top bar, below modals
+  top: var(--rp-side-inset);
+  left: var(--rp-side-inset);
+  bottom: var(--rp-side-inset);
+  width: var(--rp-side-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--rp-nav-bg);
+  color: var(--rp-nav-text);
+  border-right: 1px solid var(--rp-nav-border);
+  border-radius: var(--rp-nav-radius);
+  box-shadow: var(--rp-nav-shadow);
+  -webkit-backdrop-filter: var(--rp-surface-blur);
+  backdrop-filter: var(--rp-surface-blur);
+  transition: width .2s ease, transform .25s ease;
+}
+.rp-side-brand{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 22px 16px 16px 20px;
+}
+.rp-side-logo{
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--rp-nav-strong);
+}
+.rp-side .brand-mark{
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--rp-radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rp-hero);
+  color: var(--rp-on-hero);
+  font-size: 18px;
+  box-shadow: var(--rp-primary-shadow);
+}
+.rp-side-brand-text{ display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.rp-side-brand-title{
+  font-family: var(--rp-font-heading);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: var(--rp-heading-tracking);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-side-brand-sub{ font-size: 11.5px; color: var(--rp-nav-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-side-collapse{
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--rp-nav-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-side-collapse:hover{ background: var(--rp-nav-hover); color: var(--rp-nav-strong); }
+
+.rp-side-nav{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rp-nav-hover) transparent;
+}
+.rp-side-label{
+  padding: 8px 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--rp-nav-muted);
+}
+.rp-nav-item{
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px; // touch target
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--rp-nav-item-radius);
+  background: transparent;
+  color: var(--rp-nav-text);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+.rp-nav-item > i:first-child{
+  flex: none;
+  width: 22px;
+  margin: 0;
+  font-size: 18px;
+  text-align: center;
+}
+.rp-nav-item:hover{ background: var(--rp-nav-hover); color: var(--rp-nav-strong); }
+.rp-nav-item.active,
+.rp-nav-item.current{
+  background: var(--rp-nav-active-bg);
+  color: var(--rp-nav-active-text);
+  font-weight: 600;
+}
+.rp-nav-item.active::before,
+.rp-nav-item.current::before{
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 9px;
+  bottom: 9px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--rp-nav-indicator);
+}
+.rp-nav-text{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-caret{ margin-left: auto; font-size: 12px; transition: transform .2s ease; }
+.rp-nav-item.open .rp-caret{ transform: rotate(180deg); }
+
+// accordion submenu
+.rp-sub{ display: flex; flex-direction: column; gap: 1px; padding: 2px 0 8px 46px; }
+.rp-sub-item{
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--rp-nav-item-radius);
+  background: transparent;
+  color: var(--rp-nav-text);
+  font-size: 13.5px;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-sub-item:hover{ background: var(--rp-nav-hover); color: var(--rp-nav-strong); }
+.rp-sub-item.active{ color: var(--rp-nav-active-text); font-weight: 600; }
+.rp-sub-item .pi{ font-size: 13px; margin-right: 4px; }
+
+// flyout beside the rail (top is set from the clicked icon)
+.rp-sub.rp-flyout{
+  position: fixed;
+  left: calc(var(--rp-shell-left) + 6px);
+  z-index: 1045;
+  min-width: 230px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  padding: 8px;
+  gap: 2px;
+  background: var(--rp-surface-solid);
+  color: var(--rp-text);
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-radius-lg);
+  box-shadow: var(--rp-shadow-lg);
+  animation: rp-pop .14s ease-out;
+}
+.rp-flyout .rp-sub-item{ color: var(--rp-text); border-radius: var(--rp-control-radius); }
+.rp-flyout .rp-sub-item:hover{ background: var(--rp-surface-alt); color: var(--rp-text); }
+.rp-flyout .rp-sub-item.active{ background: var(--rp-primary-soft); color: var(--rp-primary); }
+.rp-flyout-title{
+  padding: 6px 12px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--rp-text-muted);
+}
+.rp-sub.rp-flyout-cols{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(170px, auto));
+  .rp-flyout-title{ grid-column: 1 / -1; }
+}
+@keyframes rp-pop{ from{ opacity: 0; transform: translateX(-6px); } to{ opacity: 1; transform: none; } }
+
+.rp-side-foot{
+  padding: 10px 14px 16px;
+  border-top: 1px solid var(--rp-nav-border);
+}
+
+/* ---------- top bar (side layouts) ---------- */
+.custom-navbar-bg.rp-topbar{
+  top: var(--rp-topbar-inset);
+  height: var(--rp-topbar-h);
+  margin: var(--rp-topbar-inset) var(--rp-topbar-inset) 0;
+  padding: 0 20px 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--rp-topbar-bg);
+  border: 0;
+  border-bottom: 1px solid var(--rp-topbar-border);
+  border-radius: var(--rp-topbar-radius);
+  box-shadow: var(--rp-topbar-shadow);
+  -webkit-backdrop-filter: var(--rp-surface-blur);
+  backdrop-filter: var(--rp-surface-blur);
+}
+.rp-burger{
+  display: none;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--rp-border);
+  border-radius: var(--rp-control-radius);
+  background: var(--rp-surface-solid);
+  color: var(--rp-text);
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.rp-topbar-title{ display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.rp-topbar-hello{ font-family: var(--rp-font-heading); font-weight: 700; font-size: 16px; color: var(--rp-text); letter-spacing: var(--rp-heading-tracking); }
+.rp-topbar-date{ font-size: 12.5px; color: var(--rp-text-muted); }
+.rp-user{ display: flex; align-items: center; gap: 10px; padding-left: 6px; }
+.rp-user-avatar{
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rp-hero);
+  color: var(--rp-on-hero);
+  font-weight: 700;
+  font-size: 16px;
+  text-transform: uppercase;
+  box-shadow: 0 0 0 3px var(--rp-surface-solid), 0 0 0 4px var(--rp-border);
+}
+.rp-user-text{ display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.rp-user-name{ font-weight: 600; font-size: 13.5px; color: var(--rp-text); white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.rp-user-role{ font-size: 12px; color: var(--rp-text-muted); }
+
+/* ---------- icon rail ---------- */
+@mixin rp-rail{
+  --rp-shell-left: calc(var(--rp-rail-w) + 2 * var(--rp-side-inset));
+
+  .rp-side{ width: var(--rp-rail-w); }
+  .rp-side-brand{ flex-direction: column; gap: 10px; padding: 18px 8px 12px; }
+  .rp-side-brand-text, .rp-side-label, .rp-caret{ display: none; }
+  .rp-side-nav{ padding: 4px 10px 10px; gap: 6px; }
+  .rp-sub:not(.rp-flyout){ display: none; }
+  .rp-nav-item{
+    border-radius: min(var(--rp-nav-item-radius), 16px); // a pill radius would turn the tall rail item into a blob
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 9px 4px;
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-align: center;
+    > i:first-child{
+      width: 40px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--rp-nav-item-radius);
+      background: var(--rp-nav-chip-bg);
+    }
+  }
+  .rp-nav-text{
+    max-width: 100%;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .rp-nav-item.active::before, .rp-nav-item.current::before{ left: -10px; }
+  .rp-side-foot{ padding: 10px; }
+}
+
+@media (min-width: 1200px){
+  :root[data-nav="rail"],
+  :root[data-nav="side"][data-side-collapsed]{ @include rp-rail; }
+}
+// small laptops: the full sidebar would squeeze the POS screen, so it shows as the rail
+@media (min-width: 1200px) and (max-width: 1439.98px){
+  :root[data-nav="side"]{ @include rp-rail; }
+  :root[data-nav="side"] .rp-side-collapse{ display: none; }
+}
+
+/* ---------- tablets / phones: overlay drawer ---------- */
+@media (max-width: 1199.98px){
+  :root[data-nav="side"],
+  :root[data-nav="rail"]{ --rp-shell-left: 0px; }
+
+  .rp-side{
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(290px, 86vw);
+    border-radius: 0 var(--rp-nav-radius) var(--rp-nav-radius) 0;
+    transform: translateX(calc(-100% - 24px));
+    z-index: 1045;
+  }
+  .rp-side.open{ transform: none; box-shadow: var(--rp-shadow-lg); }
+  .rp-side-collapse{ display: none; }
+  .rp-side-backdrop{
+    position: fixed;
+    inset: 0;
+    z-index: 1040;
+    background: rgba(15, 23, 42, .45);
+    animation: rp-fade .2s ease-out;
+  }
+  .rp-burger{ display: inline-flex; }
+  .custom-navbar-bg.rp-topbar{ padding: 0 12px; gap: 10px; }
+}
+@keyframes rp-fade{ from{ opacity: 0; } to{ opacity: 1; } }
+
+@media (max-width: 767.98px){
+  .rp-user-text, .rp-topbar-date{ display: none; }
+  :root{ --rp-topbar-inset: 0px !important; }
+}
+
+@media print{
+  .rp-side, .rp-side-backdrop{ display: none !important; }
+  .rp-shell{ padding-left: 0 !important; }
+}

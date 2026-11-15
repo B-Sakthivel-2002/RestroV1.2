@@ -340,7 +340,7 @@ export interface IShortBillForReport {
                   <div
                     class="order-list"
                     [ngStyle]="{
-                      'background-color': ls.orderid != 0 ? '#fff' : '#fffad6',
+                      'background-color': ls.orderid != 0 ? 'var(--rp-surface-solid)' : 'var(--rp-highlight)',
                     }"
                   >
                     <div class="ls spl">
@@ -788,8 +788,8 @@ export interface IShortBillForReport {
     .pay-label, .pay-detail label { font-size: var(--rp-fs-xs); color: var(--rp-text-muted); margin: 0 4px 0 0; }
     .pay-detail { display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 0; }
     .pay-detail .form-control { width: 100%; max-width: 200px; }
-    .pay-change { font-weight: 600; color: #198754; }
-    .pay-change.short { color: #dc3545; }
+    .pay-change { font-weight: 600; color: var(--rp-success); }
+    .pay-change.short { color: var(--rp-danger); }
   `,
 })
 export class OrderComponent implements OnInit {

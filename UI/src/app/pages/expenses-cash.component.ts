@@ -198,13 +198,13 @@ import { BranchSelectComponent } from '../shared/component/branch-select.compone
   `,
   styles: `
     .ec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
-    .ec-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; }
+    .ec-card { background: var(--rp-surface); border: 1px solid var(--rp-border); border-radius: 10px; padding: 14px; }
     .ec-card h4 { font-size: 1rem; margin-bottom: 10px; }
-    .ec-kv { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed #eef0f3; font-size: 14px; }
-    .ec-total { font-size: 15px; border-bottom: 2px solid #cbd5e1; }
-    .ec-short { color: #dc2626; } .ec-excess { color: #16a34a; }
+    .ec-kv { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--rp-border); font-size: 14px; }
+    .ec-total { font-size: 15px; border-bottom: 2px solid var(--rp-border-strong); }
+    .ec-short { color: var(--rp-danger); } .ec-excess { color: var(--rp-success); }
     .ec-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
-    .ec-kpis .ec-card { display: flex; flex-direction: column; } .ec-kpis span { font-size: 12px; color: #6b7280; } .ec-kpis strong { font-size: 1.2rem; }
+    .ec-kpis .ec-card { display: flex; flex-direction: column; } .ec-kpis span { font-size: 12px; color: var(--rp-text-muted); } .ec-kpis strong { font-size: 1.2rem; }
   `
 })
 export class ExpensesCashComponent implements OnInit {
