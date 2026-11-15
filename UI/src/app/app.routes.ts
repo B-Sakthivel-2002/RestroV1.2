@@ -23,6 +23,13 @@ export const routes: Routes = [
     data:{dataRoles:['Admin','SuperAdmin','Manager','Captain']},
     canActivate:[RoleGuard]
    },
+   // TV for take-away customers: tokens being prepared / ready to collect, full screen without the menu.
+   {
+    path:'takeaway-display',
+    loadComponent:()=>import('./pages/takeaway-display.component').then(m=>m.TakeawayDisplayComponent),
+    data:{dataRoles:['Admin','SuperAdmin','Manager','Captain']},
+    canActivate:[RoleGuard]
+   },
      // ✅ MAIN APP (with header loaded once)
   {
     path: '',
@@ -225,6 +232,11 @@ export const routes: Routes = [
    },{
       path:'complementary-report',
       loadComponent:()=>import('./pages/complementary-report.component').then(m=>m.ComplementaryReportComponent),
+      data:{dataRoles:['Admin','SuperAdmin']},
+      canActivate: [RoleGuard]
+   },{
+      path:'settings/mobile-connect',
+      loadComponent:()=>import('./pages/mobile-connect.component').then(m=>m.MobileConnectComponent),
       data:{dataRoles:['Admin','SuperAdmin']},
       canActivate: [RoleGuard]
    },{

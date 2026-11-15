@@ -107,9 +107,6 @@ import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
               <div class="col-md-6">
                 <label for="description" name="description" class="col-form-label">Description</label>
                 <input type="text" value="" class="form-control" formControlName="description" />
-                <div *ngIf="menuForm.get('description')?.invalid && menuForm.get('description')?.touched">
-                  <small class="text-danger">description is required.</small>
-                </div>
               </div>
             </div>
 
@@ -240,7 +237,7 @@ export class MenuListComponent {
 	    itemid:[this.initialMenuForm.itemid],
       categoryid:[this.initialMenuForm.categoryid,[Validators.required,Validators.pattern(/^\d+$/)]],
       itemname:[this.initialMenuForm.itemname,Validators.required],         
-      description:[this.initialMenuForm.description,Validators.required],
+      description:[this.initialMenuForm.description],
 	    defaultprice: [this.initialMenuForm.defaultprice, [Validators.required, Validators.pattern(/^\d+(\.\d{1,2})?$/)  ]],
       qty:[this.initialMenuForm.qty]  ,
       code:[this.initialMenuForm.code,Validators.required],

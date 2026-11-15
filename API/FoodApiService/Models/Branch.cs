@@ -34,6 +34,12 @@ public class Branch
     // Express Stall is available in this branch.
     public bool Expressstall { get; set; }
 
+    // A settled bill of the open work period may be cancelled.
+    public bool Ordercancel { get; set; }
+
+    // A settled bill of the open work period may be reopened to change its items.
+    public bool Orderedit { get; set; }
+
     [JsonIgnore]
     public virtual Outlet? Outlet { get; set; }
 }

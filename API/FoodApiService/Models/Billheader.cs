@@ -56,5 +56,17 @@ public class Billheader : IBranchScoped
 
     public DateTime? Businessdate { get; set; }
 
+    public string? Cancelreason { get; set; }
+
+    public int? Cancelledby { get; set; }
+
+    public DateTime? Cancelledat { get; set; }
+
+    public string? Reopenreason { get; set; }
+
+    public int? Reopenedby { get; set; }
+
+    public DateTime? Reopenedat { get; set; }
+
     public virtual ICollection<Billdetail> Billdetails { get; set; } = new List<Billdetail>();
 }

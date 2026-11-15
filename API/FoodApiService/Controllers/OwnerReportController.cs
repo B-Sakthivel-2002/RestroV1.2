@@ -82,7 +82,7 @@ public class OwnerReportController : ControllerBase
 
         var toEnd = to.AddDays(1);
         var bills = await _context.Billheaders.AsNoTracking()
-            .Where(b => b.Branchid == branch && b.Businessdate >= from && b.Businessdate < toEnd)
+            .Where(b => b.Branchid == branch && b.Businessdate >= from && b.Businessdate < toEnd && b.Lifecyclestatus != BillLifecycle.Cancelled)
             .Select(b => new
             {
                 b.Billid, b.Totalamount, b.Subtotal, b.Tax, b.Discount, b.Extraamount, b.Status, b.Paymentmode, b.Iscomplementary

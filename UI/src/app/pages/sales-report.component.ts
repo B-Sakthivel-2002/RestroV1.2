@@ -352,7 +352,7 @@ export interface itemWiseOrder {
                             <td>{{ bl.discount }}</td>
                             <td>{{ bl.extraamount }}</td>
                             <td>{{ bl.totalamount }}</td>
-                            <td class="txt-camel">{{ bl.lifecyclestatus }}</td>
+                            <td class="txt-camel" [title]="billAuditText(bl)">{{ bl.lifecyclestatus }}</td>
                             <td>{{ bl.status }}</td>
                             <td>{{ bl.orders[0].orderType }}</td>
                             <td>{{ getOrderIds(bl.orders) }}</td>
@@ -371,6 +371,22 @@ export interface itemWiseOrder {
                                 *ngIf="bl.lifecyclestatus == 'printed'"
                               >
                                 <i class="pi pi-pencil"></i>
+                              </button>
+
+                              <button
+                                class="btn btn-outline-primary" title="Edit bill: open its orders again to change items"
+                                *ngIf="bl.canedit"
+                                (click)="openBillChange(billChangeTemplate, bl, 'edit')"
+                              >
+                                <i class="pi pi-replay"></i>
+                              </button>
+
+                              <button
+                                class="btn btn-outline-danger" title="Cancel bill"
+                                *ngIf="bl.cancancel"
+                                (click)="openBillChange(billChangeTemplate, bl, 'cancel')"
+                              >
+                                <i class="pi pi-ban"></i>
                               </button>
 
                               <button
@@ -593,6 +609,31 @@ export interface itemWiseOrder {
         </div>
       </div>
     </div>
+    <ng-template #billChangeTemplate>
+      <div class="modal-header">
+        <h4 class="modal-title pull-left">
+          {{ billChange.mode === 'edit' ? 'Edit bill' : 'Cancel bill' }} {{ billChange.bill?.billnumber }}
+        </h4>
+        <button type="button" class="btn-close close pull-right" aria-label="Close" (click)="billChangeModalRef?.hide()"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">
+          {{ billChange.mode === 'edit'
+            ? 'The orders of this bill open again on their table so items can be added, changed or removed. Settle it again to finish; the bill number stays the same.'
+            : 'The bill and its orders are cancelled and left out of every sales total. This cannot be undone.' }}
+        </p>
+        <label class="col-form-label required" for="billChangeReason">Reason</label>
+        <textarea id="billChangeReason" class="form-control" rows="3" maxlength="250" [(ngModel)]="billChange.reason"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" [ngClass]="billChange.mode === 'edit' ? 'btn-primary' : 'btn-danger'"
+                [disabled]="!billChange.reason.trim() || billChange.busy" (click)="confirmBillChange()">
+          {{ billChange.mode === 'edit' ? 'Reopen for editing' : 'Cancel bill' }}
+        </button>
+        <button type="button" class="btn btn-secondary" (click)="billChangeModalRef?.hide()">Close</button>
+      </div>
+    </ng-template>
+
     <ng-template #orderFloorTemplate>
       <div class="modal-header">
         <h4 class="modal-title custom-modal-title pull-left">
@@ -685,6 +726,9 @@ export interface itemWiseOrder {
               </tr>
             </tbody>
           </table>
+          @if (billAuditText(pagedOrderList[selectedOrderId])) {
+            <p class="mb-0" style="white-space: pre-line">{{ billAuditText(pagedOrderList[selectedOrderId]) }}</p>
+          }
         </div>
       </div>
       <div class="modal-footer"></div>
@@ -1020,6 +1064,51 @@ orderlist: any;
       .map((x: any) => x.orderid)
       .join(',');
     return result.toString();
+  }
+
+  // Cancel / edit (reopen) of a settled bill: the API decides when the buttons show (branch switches, open work period).
+  billChangeModalRef?: BsModalRef;
+  billChange: { mode: 'edit' | 'cancel'; bill: any; reason: string; busy: boolean } = { mode: 'cancel', bill: null, reason: '', busy: false };
+
+  openBillChange(template: TemplateRef<void>, bill: any, mode: 'edit' | 'cancel'): void {
+    this.billChange = { mode, bill, reason: '', busy: false };
+    this.billChangeModalRef = this.modalService.show(template);
+  }
+
+  confirmBillChange(): void {
+    const { mode, bill } = this.billChange;
+    const reason = this.billChange.reason.trim();
+    if (!reason || this.billChange.busy) return;
+    this.billChange.busy = true;
+    const request$ = mode === 'edit'
+      ? this.query.reopenSettledBill(bill.billid, reason)
+      : this.query.cancelSettledBill(bill.billid, reason);
+    request$.subscribe({
+      next: (res: any) => {
+        this.billChangeModalRef?.hide();
+        if (mode === 'edit') {
+          // Straight to the order screen of the bill's table (or order type).
+          const d = res.data || {};
+          this.router.navigate([d.tableid ? '/order/' + d.tableid + '/' + d.floorid + '/1/' + d.tablename : '/order/0/0/' + d.ordertypeid]);
+        } else {
+          this.alertService.showAlert('Success', res.message || 'Bill cancelled');
+          this.getOrderByDate();
+        }
+      },
+      error: (err: any) => {
+        this.billChange.busy = false;
+        this.alertService.showAlert('Error', err?.error?.message || 'Could not change the bill');
+      },
+    });
+  }
+
+  billAuditText(bl: any): string {
+    if (!bl) return '';
+    const when = (d: any) => (d ? new Date(d).toLocaleString() : '');
+    const lines: string[] = [];
+    if (bl.reopenedat) lines.push(`Reopened by ${bl.reopenedby || '-'} on ${when(bl.reopenedat)}: ${bl.reopenreason || ''}`);
+    if (bl.cancelledat) lines.push(`Cancelled by ${bl.cancelledby || '-'} on ${when(bl.cancelledat)}: ${bl.cancelreason || ''}`);
+    return lines.join('\n');
   }
 
   openModal(

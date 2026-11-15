@@ -68,6 +68,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_branch_code ON branch (upper(code)) WHERE c
 -- Express Stall is switched on branch by branch (menu entry, stall order screen, category flag).
 ALTER TABLE branch ADD COLUMN IF NOT EXISTS expressstall boolean NOT NULL DEFAULT false;
 
+-- Settled bills of the open work period may be cancelled / reopened for editing (per branch, off by default).
+ALTER TABLE branch ADD COLUMN IF NOT EXISTS ordercancel boolean NOT NULL DEFAULT false;
+ALTER TABLE branch ADD COLUMN IF NOT EXISTS orderedit boolean NOT NULL DEFAULT false;
+
 -- Kitchens of a branch, each with its own KOT printer (Windows printer name as installed on the
 -- API computer, e.g. "EPSON TM-T82" or a shared one "\\KITCHEN-PC\EPSON").
 CREATE TABLE IF NOT EXISTS kitchen (
@@ -415,6 +419,14 @@ CREATE TABLE IF NOT EXISTS billheader (
     outletid            integer,
     CONSTRAINT billheader_pkey PRIMARY KEY (billid)
 );
+
+-- Who cancelled / reopened a settled bill, when and why.
+ALTER TABLE billheader ADD COLUMN IF NOT EXISTS cancelreason varchar(250);
+ALTER TABLE billheader ADD COLUMN IF NOT EXISTS cancelledby  integer;
+ALTER TABLE billheader ADD COLUMN IF NOT EXISTS cancelledat  timestamp without time zone;
+ALTER TABLE billheader ADD COLUMN IF NOT EXISTS reopenreason varchar(250);
+ALTER TABLE billheader ADD COLUMN IF NOT EXISTS reopenedby   integer;
+ALTER TABLE billheader ADD COLUMN IF NOT EXISTS reopenedat   timestamp without time zone;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_billheader_branch_billnumber ON billheader (branchid, billnumber);
 
 CREATE TABLE IF NOT EXISTS billdetail (

@@ -96,6 +96,12 @@ public class HotelContext : DbContext
             entity.Property(e => e.Totalamount).HasPrecision(10, 2).HasDefaultValueSql("0").HasColumnName("totalamount");
             entity.Property(e => e.Updatedby).HasColumnName("updatedby");
             entity.Property(e => e.Outletid).HasColumnName("outletid");
+            entity.Property(e => e.Cancelreason).HasMaxLength(250).HasColumnName("cancelreason");
+            entity.Property(e => e.Cancelledby).HasColumnName("cancelledby");
+            entity.Property(e => e.Cancelledat).HasColumnType("timestamp without time zone").HasColumnName("cancelledat");
+            entity.Property(e => e.Reopenreason).HasMaxLength(250).HasColumnName("reopenreason");
+            entity.Property(e => e.Reopenedby).HasColumnName("reopenedby");
+            entity.Property(e => e.Reopenedat).HasColumnType("timestamp without time zone").HasColumnName("reopenedat");
         });
 
         modelBuilder.Entity<Branch>(entity =>
@@ -115,6 +121,8 @@ public class HotelContext : DbContext
             entity.Property(e => e.Outletid).HasColumnName("outletid");
             entity.Property(e => e.Code).HasMaxLength(20).HasColumnName("code");
             entity.Property(e => e.Expressstall).HasColumnName("expressstall");
+            entity.Property(e => e.Ordercancel).HasColumnName("ordercancel");
+            entity.Property(e => e.Orderedit).HasColumnName("orderedit");
             entity.HasOne(d => d.Outlet).WithMany(p => p.Branches).HasForeignKey(d => d.Outletid).HasConstraintName("fk_branch_outlet");
         });
 

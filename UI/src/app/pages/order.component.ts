@@ -79,11 +79,6 @@ export interface IShortBillForReport {
                     class="mn-list"
                     [ngClass]="fd.flag ? 'active' : ''"
                     (click)="getSubMenuList(fd.id)"
-                    [ngStyle]="{
-                      'background-color': colorList[customIndex],
-                      color: colorList[customIndex] ? '#fff' : '#000',
-                      'border-color': colorList[customIndex],
-                    }"
                   >
                     <h4>{{ fd.name }}</h4>
                   </div>
@@ -280,22 +275,44 @@ export interface IShortBillForReport {
                       <select
                         class="form-select"
                         [(ngModel)]="selectDiscount.id"
-                        (change)="onChangeDiscountSelect($event)"
+                        (ngModelChange)="onPanelDiscountChange($event)"
                       >
-                        <option [value]="-1" selected>Select a discount</option>
+                        <option [value]="-1" selected>No discount</option>
                         @for (
                           sd of discountList;
-                          track sd.discountId;
+                          track sd.discountid;
                           let idx = $index
                         ) {
                           <option [value]="idx">
-                            {{ sd.discountname }}
+                            {{ discountLabel(sd) }}
                           </option>
                         }
                       </select>
                     </div>
                   </div>
+                  @if (selectDiscount.flag) {
+                    <div class="col-6">
+                      <div class="form-group">
+                        <h4 class="sb-tt">Discount amount (₹)</h4>
+                        <div class="d-flex gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            class="form-control"
+                            id="customDiscount"
+                            [(ngModel)]="selectDiscount.value"
+                            (keyup.enter)="applyCustomDiscount()"
+                          />
+                          <button type="button" class="btn btn-primary btn-sm" (click)="applyCustomDiscount()">Apply</button>
+                        </div>
+                      </div>
+                    </div>
+                  }
                 </div>
+                @if (discountNote) {
+                  <small class="text-danger d-block mt-1">{{ discountNote }}</small>
+                }
               </div>
             </div>
 
@@ -347,6 +364,16 @@ export interface IShortBillForReport {
                           >
                             <i class="pi pi-print"></i>
                           </button>
+                          @if (canEditSentOrder(ls)) {
+                            @if (editDraft?.orderid === ls.orderid) {
+                              <button type="button" class="btn btn-sm btn-primary ms-2" title="Save the changes to this order" [disabled]="savingDraft" (click)="saveOrderEdit()">Save</button>
+                              <button type="button" class="btn btn-sm btn-outline-secondary ms-1" title="Discard the changes" [disabled]="savingDraft" (click)="cancelOrderEdit()">Discard</button>
+                            } @else if (!editDraft) {
+                              <button type="button" class="btn btn-sm btn-link p-0 ms-2" title="Change or remove items of this order" (click)="startOrderEdit(ls)">
+                                <i class="pi pi-pencil"></i>
+                              </button>
+                            }
+                          }
                         </h2>
                       } @else {
                         <h2>
@@ -356,7 +383,7 @@ export interface IShortBillForReport {
                     </div>
 
                     @for (
-                      bl of ls.orderdetail;
+                      bl of (editDraft?.orderid === ls.orderid && ls.orderid != 0 ? editDraft.orderdetail : ls.orderdetail);
                       track bl.orderdetailid;
                       let ind = $index
                     ) {
@@ -365,7 +392,13 @@ export interface IShortBillForReport {
                           <span>{{ bl.name }}</span>
                         </h2>
                         <p>({{ bl.price }})</p>
-                        @if (ls.orderid != 0) {
+                        @if (ls.orderid != 0 && editDraft?.orderid === ls.orderid) {
+                          <p>
+                            <span (click)="changeDraftQty(ind, -1)" class="btn btn-outline-secondary btn-sm">-</span>{{ bl.qty }}
+                            <span (click)="changeDraftQty(ind, 1)" class="btn btn-primary btn-sm">+</span>
+                            <span (click)="removeDraftLine(ind)" class="btn btn-outline-danger btn-sm ms-1" title="Remove this item"><i class="pi pi-trash"></i></span>
+                          </p>
+                        } @else if (ls.orderid != 0) {
                           <p>{{ bl.qty }}</p>
                         } @else {
                           <p>
@@ -418,6 +451,33 @@ export interface IShortBillForReport {
                 </div>
               </div>
 
+              @if (typeId != 1) {
+                <div class="pay-inline no-print">
+                  <div class="pay-modes" role="group" aria-label="Payment mode">
+                    <span class="pay-label">Payment</span>
+                    @for (m of payModes; track m.value) {
+                      <button type="button" class="btn btn-sm" [class.btn-primary]="payMode === m.value" [class.btn-outline-primary]="payMode !== m.value" (click)="setPayMode(m.value)">
+                        <i [class]="m.icon"></i> {{ m.label }}
+                      </button>
+                    }
+                  </div>
+                  @if (payMode === 'cash') {
+                    <div class="pay-detail">
+                      <label for="cashReceived">Cash received</label>
+                      <input id="cashReceived" type="number" min="0" step="any" class="form-control form-control-sm" [(ngModel)]="cashReceived" [placeholder]="postBill.totalAmount" />
+                      @if (cashChange !== null) {
+                        <span class="pay-change" [class.short]="cashChange < 0">{{ cashChangeText }}</span>
+                      }
+                    </div>
+                  } @else {
+                    <div class="pay-detail">
+                      <label for="payRef">{{ payMode === 'card' ? 'Card ref / last 4 digits' : 'UPI ref no.' }}</label>
+                      <input id="payRef" type="text" maxlength="40" class="form-control form-control-sm" [(ngModel)]="payRef" placeholder="Optional" />
+                    </div>
+                  }
+                </div>
+              }
+
               <div class="btn-bg">
                 <div class="row">
                   <div class="col-md-12">
@@ -449,11 +509,14 @@ export interface IShortBillForReport {
 
                     <button
                       class="btn btn-primary"
-                      (click)="openModal(settleTemplate, 'settle')"
-                      [disabled]="!this.isSettle"
+                      (click)="typeId != 1 ? settleInline() : openModal(settleTemplate, 'settle')"
+                      [disabled]="!this.isSettle || !!editDraft"
                     >
                       Settle
                     </button>
+                    @if (typeId != 1 && isSettle) {
+                      <button type="button" class="btn btn-link btn-sm px-1" title="Unpaid / complimentary / split payment" (click)="openModal(settleTemplate, 'settle')">More</button>
+                    }
                     @if (typeId == 1) {
                       <button
                         class="btn btn-primary"
@@ -466,7 +529,7 @@ export interface IShortBillForReport {
 
                     @if (typeId != 1) {
                       <button
-                        (click)="createBillDirectly()"
+                        (click)="applyInlinePayment() && createBillDirectly()"
                         class="btn btn-primary"
                       >
                         KOT & Print Bill
@@ -477,7 +540,7 @@ export interface IShortBillForReport {
                       class="btn btn-outline-secondary"
                       title="Print bill"
                       (click)="setPrintBill()"
-                      [disabled]="!this.isSettle || isPrinted"
+                      [disabled]="!this.isSettle || isPrinted || !!editDraft"
                     >
                       <i class="pi pi-print"></i>
                     </button>
@@ -540,7 +603,7 @@ export interface IShortBillForReport {
               (change)="onChangeDiscountSelect($event)"
             >
               <option [value]="-1" selected>Select a discount</option>
-              @for (sd of discountList; track sd.discountId; let idx = $index) {
+              @for (sd of discountList; track sd.discountid; let idx = $index) {
                 <option [value]="idx">
                   {{ sd.discountname }}
                 </option>
@@ -702,7 +765,7 @@ export interface IShortBillForReport {
             postBill.status == ''
           "
           (click)="
-            isPrinted ? updateNewBill(updateBillId) : setNewBill();
+            updateBillId > 0 ? updateNewBill(updateBillId) : setNewBill();
             settleModalRef?.hide()
           "
         >
@@ -723,6 +786,13 @@ export interface IShortBillForReport {
   styles: `
     .table-ops, .guest-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
     .guest-tabs { padding-top: 0; }
+    .pay-inline { display: flex; flex-direction: column; gap: 8px; padding: 10px 15px; border-top: 1px solid var(--rp-border); background: var(--rp-surface-alt); }
+    .pay-modes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .pay-label, .pay-detail label { font-size: var(--rp-fs-xs); color: var(--rp-text-muted); margin: 0 4px 0 0; }
+    .pay-detail { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .pay-detail .form-control { width: 160px; }
+    .pay-change { font-weight: 600; color: #198754; }
+    .pay-change.short { color: #dc3545; }
   `,
 })
 export class OrderComponent implements OnInit {
@@ -905,7 +975,7 @@ export class OrderComponent implements OnInit {
       style.textContent = `
       body { font-family: Arial, sans-serif; padding: 0px; font-size: 10px; }
       h2 { color: #333; }
-      button,select { display: none; }  
+      button,select,.no-print { display: none; }  
      .order-list {
   display: flex;
   flex-direction: column;
@@ -1350,11 +1420,46 @@ width: 150px;
 
   onChangeDiscountSelect(event: any) {
     const selectedValue = event.target.value;
-    if (this.discountList[selectedValue].discountname == 'customize') {
+    if (this.discountList[selectedValue]?.discountname == 'customize') {
       this.selectDiscount.flag = true;
     } else {
       this.selectDiscount.flag = false;
     }
+  }
+
+  // % panel: choosing a discount applies it straight away; "customize" waits for the amount (Apply).
+  onPanelDiscountChange(value: any): void {
+    const idx = Number(value);
+    const discount = this.discountList[idx];
+    this.selectDiscount.flag = discount?.discountname == 'customize';
+    if (!discount) {
+      this.onDiscountSelect(-1);
+    } else if (!this.selectDiscount.flag) {
+      this.onDiscountSelect(idx);
+    }
+  }
+
+  applyCustomDiscount(): void {
+    const amount = Number(this.selectDiscount.value);
+    if (!(amount > 0)) {
+      this.alertService.showAlert('Discount', 'Enter the discount amount');
+      return;
+    }
+    this.onDiscountSelect(this.selectDiscount.id);
+  }
+
+  discountLabel(d: any): string {
+    if (d.discountname == 'customize') return 'Custom amount';
+    const value = d.discounttype == 'percentage' ? `${Number(d.discountrate)}%` : `₹${Number(d.discountrate)}`;
+    const range = d.discountrangestatus ? ` (bills ₹${Number(d.discountfrom)} - ₹${Number(d.discountto)})` : '';
+    return `${d.discountname} - ${value}${range}`;
+  }
+
+  // A chosen discount whose bill-amount range does not include this bill gives nothing: say why.
+  get discountNote(): string {
+    const d = this.postBill.discountFlag ? this.discountList[this.postBill.discountIndex] : null;
+    if (!d || d.discountname == 'customize' || !d.discountrangestatus || Number(this.postBill.discount) > 0) return '';
+    return `"${d.discountname}" applies only to bills from ₹${Number(d.discountfrom)} to ₹${Number(d.discountto)}.`;
   }
 
   onDiscountSelect(inputId: any): void {
@@ -1563,7 +1668,7 @@ width: 150px;
     this.postBill.status = 'unpaid';
     this.postBill.paidamount = null;
     this.postBill.notes = null;
-    this.setNewBill();
+    this.updateBillId > 0 ? this.updateNewBill(this.updateBillId) : this.setNewBill();
   }
 
   async setNewBill(lifeStatus?: any) {
@@ -1714,6 +1819,7 @@ width: 150px;
 
   resetPostBill() {
     this.savedTotals = null;
+    this.editDraft = null;
     this.postBill = {
       ...this.defaultPostBill,
       orders: [],
@@ -1729,6 +1835,9 @@ width: 150px;
     this.selectedcustomeremail = '';
     this.phoneMatches = [];
     this.inputComment = '';
+    this.payMode = 'cash';
+    this.cashReceived = null;
+    this.payRef = '';
     this.isPrinted = false;
     this.updateBillId = -1;
     this.isSettle = false;
@@ -1770,6 +1879,9 @@ width: 150px;
             if (x.status == 'printed') {
               this.isPrinted = true;
               this.updateBillId = x.billingid;
+            } else if (x.billingid > 0) {
+              // A settled bill reopened for editing: settling or printing updates that same bill.
+              this.updateBillId = x.billingid;
             }
             return { ...x, flag: true };
           });
@@ -1780,7 +1892,7 @@ width: 150px;
           this.isSettle = true;
           this.isKOT = false;
           this.calculatetotalprice();
-          if (this.isPrinted) {
+          if (this.isPrinted && this.typeId == 1) {
             this.openModal(this.settleTemplate, 'settle');
           }
           this.changeDetectRef.detectChanges();
@@ -1821,6 +1933,78 @@ width: 150px;
     this.isPrinted = false;
     this.updateBillId = -1;
     this.getOrderByTable(this.tableId, this.typeId);
+  }
+
+  // ---- Editing a sent order of a reopened bill (settled bill opened again for changes) ----
+  editDraft: any = null;
+  savingDraft = false;
+
+  canEditSentOrder(order: any): boolean {
+    return this.updateBillId > 0 && !this.isPrinted && order.billingid > 0 && order.status === 'submitted';
+  }
+
+  startOrderEdit(order: any) {
+    this.editDraft = { ...order, orderdetail: (order.orderdetail || []).map((d: any) => ({ ...d })) };
+  }
+
+  cancelOrderEdit() {
+    this.editDraft = null;
+  }
+
+  changeDraftQty(index: number, step: number) {
+    const line = this.editDraft?.orderdetail[index];
+    if (!line) return;
+    line.qty = Math.max(1, Math.min(100, Number(line.qty) + step));
+    line.sumofprice = parseFloat((line.price * line.qty).toFixed(2)); // display only; the API prices the order
+  }
+
+  removeDraftLine(index: number) {
+    this.editDraft?.orderdetail.splice(index, 1);
+  }
+
+  // One save per order: the kitchen and captain get one "edited" alert, and the bill total comes back from the API.
+  saveOrderEdit() {
+    const draft = this.editDraft;
+    if (!draft || this.savingDraft) return;
+    const original = (this.postBill.orders || []).find((o: any) => o.orderid === draft.orderid);
+    const key = (lines: any[]) => JSON.stringify((lines || []).map((d: any) => [d.itemid, Number(d.qty)]));
+    if (original && key(original.orderdetail) === key(draft.orderdetail)) {
+      this.editDraft = null;
+      return;
+    }
+    const done = (title: string, message: string) => {
+      this.savingDraft = false;
+      this.editDraft = null;
+      this.alertService.showAlert(title, message);
+      this.getOrderByTable(this.tableId, this.typeId);
+    };
+    const failed = (err: any) => {
+      this.savingDraft = false;
+      this.alertService.showAlert('Error', err?.error?.message || 'The order could not be saved');
+    };
+    this.savingDraft = true;
+    if (!draft.orderdetail.length) {
+      this.query.cancelOrderWithRemark(draft.orderid, 'All items removed while editing a reopened bill').subscribe({
+        next: () => done('Success', 'Order ' + draft.orderid + ' cancelled'),
+        error: failed,
+      });
+      return;
+    }
+    this.query.updateOrderList({
+      orderid: draft.orderid,
+      waiterid: draft.waiterid ?? 0,
+      tableid: draft.tableid ?? 0,
+      timedate: draft.timedate,
+      customerid: draft.customerid ?? 0,
+      bookingid: draft.bookingid ?? 0,
+      ordertypeid: draft.ordertypeid,
+      comments: draft.comments ?? null,
+      guestlabel: draft.guestlabel ?? null,
+      orderdetail: draft.orderdetail.map((d: any) => ({ orderdetailid: d.orderdetailid, itemid: d.itemid, qty: Number(d.qty), price: d.price, sumofprice: d.sumofprice })),
+    }).subscribe({
+      next: (res: any) => (res?.status === 'Success' ? done('Success', 'Order ' + draft.orderid + ' updated') : failed({ error: res })),
+      error: failed,
+    });
   }
 
   reprintKot(orderId: number) {
@@ -2044,6 +2228,61 @@ width: 150px;
     console.log(searchMenuList, 'allF');
   }
 
+  // ---- Take-away / delivery payment, entered on the panel (no popup) ----
+  readonly payModes = [
+    { value: 'cash', label: 'Cash', icon: 'pi pi-wallet' },
+    { value: 'card', label: 'Card', icon: 'pi pi-credit-card' },
+    { value: 'upi', label: 'UPI', icon: 'pi pi-mobile' },
+  ];
+  payMode = 'cash';
+  cashReceived: number | null = null;
+  payRef = '';
+
+  setPayMode(mode: string) {
+    this.payMode = mode;
+    this.cashReceived = null;
+    this.payRef = '';
+  }
+
+  // Change to hand back (negative = customer paid too little); null until an amount is typed.
+  get cashChange(): number | null {
+    if (this.cashReceived === null || (this.cashReceived as any) === '') return null;
+    return Math.round((Number(this.cashReceived) - Number(this.postBill.totalAmount || 0)) * 100) / 100;
+  }
+
+  get cashChangeText(): string {
+    const c = this.cashChange ?? 0;
+    return c < 0 ? 'Short by ' + (-c).toFixed(2) : 'Change ' + c.toFixed(2);
+  }
+
+  // Puts the panel's payment on the bill as paid. Returns false (with a message) when the cash is short.
+  applyInlinePayment(): boolean {
+    const change = this.payMode === 'cash' ? this.cashChange : null;
+    if (change !== null && change < 0) {
+      this.alertService.showAlert('Payment', 'Cash received is less than the bill amount');
+      return false;
+    }
+    const ref = (this.payRef || '').trim();
+    this.postBill.lifecycleStatus = 'finalized';
+    this.postBill.status = 'paid';
+    this.postBill.iscomplementary = false;
+    this.postBill.complementaryreason = '';
+    this.postBill.paymentmode = this.payMode;
+    this.postBill.paidamount = this.postBill.totalAmount;
+    this.postBill.notes =
+      change !== null
+        ? `Cash received ${Number(this.cashReceived).toFixed(2)}, change ${change.toFixed(2)}`
+        : ref
+          ? `${this.payMode === 'card' ? 'Card' : 'UPI'} ref ${ref}`
+          : '';
+    return true;
+  }
+
+  settleInline() {
+    if (!this.applyInlinePayment()) return;
+    this.updateBillId > 0 ? this.updateNewBill(this.updateBillId) : this.setNewBill();
+  }
+
   createBillDirectly() {
     let outputParams = {
       customerid: 0,
@@ -2064,7 +2303,7 @@ width: 150px;
               flag: true,
             };
             this.postBill.orders.push(customSingleOrders);
-            this.setNewBill();
+            this.updateBillId > 0 ? this.updateNewBill(this.updateBillId) : this.setNewBill();
           }
         },
         error: async (err: any) => {
@@ -2089,7 +2328,7 @@ width: 150px;
                 flag: true,
               };
               this.postBill.orders.push(customSingleOrders);
-              this.setNewBill();
+              this.updateBillId > 0 ? this.updateNewBill(this.updateBillId) : this.setNewBill();
             }
           },
           error: async (err: any) => {

@@ -104,6 +104,11 @@ public class WorkPeriodController : Controller
         if (wp.Status == "closed")
             return BadRequest(new { status = "Error", message = "Work period already closed", data = (object)null });
 
+        var reopened = await _context.Billheaders.Where(b => b.Branchid == wp.Branchid && b.Lifecyclestatus == BillLifecycle.Reopened)
+            .Select(b => b.Billnumber).FirstOrDefaultAsync();
+        if (reopened != null)
+            return BadRequest(new { status = "Error", message = $"Bill {reopened} is open for editing. Settle or cancel it before closing the work period.", data = (object)null });
+
         // Pending orders of this work period's branch only.
         if (await _context.Orders.CountAsync(o => o.Timedate >= wp.Openedat && o.Branchid == wp.Branchid && o.Status == "submitted") > 0)
             return BadRequest(new { status = "Error", message = "You can't close the period while an order is pending", data = (object)null });

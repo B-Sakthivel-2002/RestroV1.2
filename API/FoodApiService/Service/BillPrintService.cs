@@ -46,6 +46,11 @@ public class BillPrintService
                 .FirstOrDefault())
             .FirstOrDefaultAsync() ?? "TAKEAWAY";
 
+        // Table name (dine-in only; take-away / delivery bills have no table)
+        int? tableId = bill.Billdetails.Select(d => d.Order?.Tableid).FirstOrDefault(t => t > 0);
+        string? tableName = tableId == null ? null
+            : await _context.Tables.Where(t => t.Tableid == tableId).Select(t => t.Tablename).FirstOrDefaultAsync() ?? $"Table {tableId}";
+
         // Items grouped by itemid
         var billItemIds = bill.Billdetails
             .SelectMany(d => d.Order?.Orderdetails ?? new List<Orderdetail>())
@@ -103,6 +108,13 @@ public class BillPrintService
             // Order type
             graphics.DrawString(orderTypeName.ToUpper(), boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
             y += 15f;
+
+            // Table
+            if (!string.IsNullOrEmpty(tableName))
+            {
+                graphics.DrawString("Table : " + tableName, boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
+                y += 15f;
+            }
 
             // Cashier
             graphics.DrawString("Cashier# " + cashierName, normalFont, Brushes.Black, left, y);
@@ -165,9 +177,25 @@ public class BillPrintService
             graphics.DrawString($"{halfTax:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
             y += 15f;
 
-            decimal subtotalPlusTax = bill.Subtotal.GetValueOrDefault() + bill.Tax.GetValueOrDefault();
-            decimal total = bill.Totalamount ?? decimal.Round(subtotalPlusTax, 0);
-            decimal roundOff = total - subtotalPlusTax;
+            decimal discount = bill.Discount.GetValueOrDefault();
+            if (discount != 0)
+            {
+                graphics.DrawString("Discount", normalFont, Brushes.Black, left + 60f, y);
+                graphics.DrawString($"-{discount:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
+                y += 15f;
+            }
+
+            decimal extra = bill.Extraamount.GetValueOrDefault();
+            if (extra != 0)
+            {
+                graphics.DrawString("Extra Charges", normalFont, Brushes.Black, left + 60f, y);
+                graphics.DrawString($"{extra:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
+                y += 15f;
+            }
+
+            decimal beforeRounding = bill.Subtotal.GetValueOrDefault() + bill.Tax.GetValueOrDefault() - discount + extra;
+            decimal total = bill.Totalamount ?? decimal.Round(beforeRounding, 0);
+            decimal roundOff = total - beforeRounding;
             graphics.DrawString("Round Off", normalFont, Brushes.Black, left + 60f, y);
             graphics.DrawString($"{roundOff:F2}", normalFont, Brushes.Black, left + width, y, rightFormat);
             y += 15f;

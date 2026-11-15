@@ -114,6 +114,11 @@ export const menuList ={
           icon: ""
         },
         {
+          name: "Take-away Display (TV)",
+          url: "/takeaway-display",
+          icon: ""
+        },
+        {
           name: "Branch",
           url: "/branch",
           icon: "user"
@@ -185,6 +190,11 @@ export const menuList ={
       url: "/settings",
       icon: "pi pi-cog  icon",
       submenu: [                
+        {
+          name: "Mobile App Connect",
+          url: "/settings/mobile-connect",
+          icon: "preferences"
+        },
         {
 
           name: "Profile",
@@ -353,6 +363,11 @@ export const captainMenuList ={
         {
           name: "Token Display (TV)",
           url: "/token-display",
+          icon: ""
+        },
+        {
+          name: "Take-away Display (TV)",
+          url: "/takeaway-display",
           icon: ""
         },        
         

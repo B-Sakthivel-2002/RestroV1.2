@@ -48,7 +48,7 @@ public class CategoriesController : ControllerBase
         var cat = new Category
         {
             Categoryname = category.Categoryname,
-            Flag = false,
+            Flag = category.Flag,
             Expressstall = category.Expressstall
         };
         cat.StampBranch(tenant, category.Branchid);

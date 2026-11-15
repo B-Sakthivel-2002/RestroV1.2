@@ -1031,6 +1031,25 @@ h1, h2, h3, h4, h5, h6{ color: inherit; }
 }
 .order-content .rgt .minimize .cnt-scrl{ height: calc(100vh - 480px); }
 
+// Wide screens: the bill panel is exactly the screen height under the header, so the totals and the
+// Settle / KOT buttons always stay visible and only the item list scrolls. (The list used to have a
+// fixed height, which pushed the buttons below the screen once the panel above it grew.)
+@media (min-width: 1200px) {
+  .order-content .rgt{
+    position: sticky;
+    top: 66px; // header height (65.5px)
+    align-self: flex-start;
+    height: calc(100vh - 66px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .order-content .rgt > .container-bill{ flex-shrink: 0; }
+  .order-content .rgt > #customPrintOut{ flex: 1 1 auto; min-height: 0; }
+  .order-content .rgt .cnt-scrl,
+  .order-content .rgt .minimize .cnt-scrl{ flex: 1 1 auto; height: auto; min-height: 60px; }
+}
+
 // running bills (take-away / delivery)
 .sh-grd-bg{
   flex-shrink: 0;
@@ -1084,21 +1103,26 @@ h1, h2, h3, h4, h5, h6{ color: inherit; }
   text-align: center;
   align-content: center;
   cursor: pointer;
+  // every category tab looks the same; the selected one is filled with the primary colour
   background: var(--rp-surface);
-  border: 0;
+  color: var(--rp-text);
+  border: 1px solid var(--rp-border);
   border-radius: var(--rp-radius);
   box-shadow: var(--rp-shadow-sm);
-  transition: filter .15s ease, box-shadow .15s ease;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 .order-content .lft .mn-list:hover{
-  filter: brightness(1.08);
+  background: var(--rp-primary-soft);
+  border-color: var(--rp-primary);
   box-shadow: var(--rp-shadow-md);
 }
 .order-content .lft .mn-list.active{
-  background: var(--rp-dark) !important;
-  color: #fff !important;
-  box-shadow: 0 0 0 3px rgba(31, 41, 55, 0.18), var(--rp-shadow-md);
+  background: var(--rp-primary);
+  border-color: var(--rp-primary);
+  color: #fff;
+  box-shadow: 0 0 0 3px var(--rp-primary-ring), var(--rp-shadow-md);
 }
+.order-content .lft .mn-list.active h4{ font-weight: 600; }
 .order-content .lft .mn-list.active::before{
   position: absolute;
   content: "\e932";

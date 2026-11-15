@@ -29,4 +29,8 @@ public class BillUpdateRequest
     public int? Branchid { get; set; }
 
     public int? Outletid { get; set; }
+
+    // Orders on the screen. For a reopened bill, new orders (KOTs sent while editing) join the bill.
+    [JsonPropertyName("orderids")]
+    public List<int>? OrderIds { get; set; }
 }

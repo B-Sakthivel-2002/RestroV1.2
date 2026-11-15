@@ -395,6 +395,15 @@ private branchDirectory$:any;
       )
   }
 
+  // A settled bill of the open work period: cancel it, or reopen it to change its items (branch switches).
+  cancelSettledBill(billId:number, reason:string):Observable<any>{
+    return this.http.post(AppSettings.apiUrl+'Bill/'+billId+'/Cancel',{ reason });
+  }
+
+  reopenSettledBill(billId:number, reason:string):Observable<any>{
+    return this.http.post(AppSettings.apiUrl+'Bill/'+billId+'/Reopen',{ reason });
+  }
+
   getBillForReport(paramObj:any):Observable<any>{     
       return this.http.get(AppSettings.apiUrl+'Bill/GetBillOrderReport',{params:{
         fromDate: paramObj.fromDate.toString(),
@@ -1135,6 +1144,16 @@ private branchDirectory$:any;
   }
 
   // TV calling display: Called tokens with their tables (no contact details).
+  // Settings > Mobile App Connect: this server's network addresses and API URLs.
+  getServerConnectInfo(): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'ServerInfo/Connect');
+  }
+
+  // Take-away customer TV: { preparing: [...], ready: [...], summary }.
+  getTakeawayDisplay(branchId?: number | null): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'TakeawayDisplay' + this.branchQuery(branchId));
+  }
+
   getWaitlistDisplay(branchId?: number | null): Observable<any> {
     return this.http.get(AppSettings.apiUrl + 'Waitlist/Display' + this.branchQuery(branchId));
   }
@@ -1332,6 +1351,11 @@ private branchDirectory$:any;
   //   });
 
   // }
+
+  // Cancels one sent order with a remark (used when every item of a reopened bill's order is removed).
+  cancelOrderWithRemark(orderId: number, remarks: string): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Orders/CancelOrder', { orderid: orderId, remarks, complimentaryf: false });
+  }
 
   deleteOrder(inputPost: any): Observable<any> {
   return this.http.post(AppSettings.apiUrl + 'Orders/CancelOrder',

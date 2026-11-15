@@ -444,7 +444,7 @@ public class OrdersController : ControllerBase
             .Select(o => new
             {
                 o.Orderid, o.Waiterid, o.Ordernumber, o.Tableid, o.Timedate,
-                o.Customerid, o.Bookingid, o.Totalprice, o.Billingid, o.Ordertypeid, o.Status, o.Businessdate, o.Guestlabel,
+                o.Customerid, o.Bookingid, o.Totalprice, o.Billingid, o.Ordertypeid, o.Status, o.Businessdate, o.Guestlabel, o.Comments,
                 Customername = _context.Customers.Where(c => c.Customerid == o.Customerid).Select(c => c.Name).FirstOrDefault(),
                 Orderdetail = o.Orderdetails.Select(od => new
                 {

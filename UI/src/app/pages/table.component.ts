@@ -111,9 +111,6 @@ import { AlertService } from '@appservices/alert.service';
               <div class="col-md-8">
                 <label for="description" name="description" class="col-form-label">Description</label>
                 <input type="text" value="" class="form-control" formControlName="description" />
-                <div *ngIf="tableForm.get('description')?.invalid && tableForm.get('description')?.touched">
-                  <small class="text-danger">description is required.</small>
-                </div>
               </div>
               <div class="col-md-4">
                 <label for="status" name="status" class="col-form-label">
@@ -151,7 +148,7 @@ export class TableComponent {
 	     tableid:[0],
 	     floorid:[1],
        tablename:['',Validators.required],    	     
-       description:['',Validators.required],
+       description:[''],
 	     status: [true],
        capacity: [4, [Validators.required, Validators.min(1), Validators.max(50)]],
     })

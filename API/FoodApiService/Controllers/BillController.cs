@@ -123,6 +123,7 @@ public class BillController : ControllerBase
                 Tax = (decimal)calc.Tax,
                 Subtotal = (decimal)calc.SubTotal,
                 Discount = (decimal)calc.Discount,
+                Discountid = calc.Discount != 0 ? discountId : null,
                 Extraamount = (decimal)calc.ExtraAmount,
                 Paidamount = request.Paidamount,
                 Paymentmode = request.Paymentmode,
@@ -240,6 +241,48 @@ public class BillController : ControllerBase
             {
                 return NotFound(new { status = "Error", message = "Bill not found" });
             }
+            if (bill.Lifecyclestatus == BillLifecycle.Cancelled)
+            {
+                return BadRequest(new { status = "Error", message = "This bill is cancelled" });
+            }
+
+            bool wasReopened = bill.Lifecyclestatus == BillLifecycle.Reopened;
+            if (wasReopened && request.OrderIds?.Count > 0)
+            {
+                // KOTs sent while the bill was reopened join it (same bill number).
+                var onBill = bill.Billdetails.Select(d => d.Orderid).ToHashSet();
+                var newIds = request.OrderIds.Where(id => !onBill.Contains(id)).Distinct().ToList();
+                if (newIds.Count > 0)
+                {
+                    var newOrders = await _context.Orders.ForBranch(tenant)
+                        .Where(o => newIds.Contains(o.Orderid) && o.Branchid == bill.Branchid && o.Status != "cancelled")
+                        .ToListAsync();
+                    if (newOrders.Count != newIds.Count || await _context.Billdetails.AnyAsync(d => newIds.Contains(d.Orderid)))
+                        return BadRequest(new { status = "Error", message = "One or more orders cannot be added to this bill" });
+                    foreach (var o in newOrders)
+                    {
+                        o.Billingid = bill.Billid;
+                        _context.Billdetails.Add(new Billdetail { Billid = bill.Billid, Orderid = o.Orderid, Branchid = bill.Branchid, Outletid = bill.Outletid });
+                    }
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            // Amounts from the bill's orders (they can change while a bill is reopened), with the bill's discount.
+            var activeIds = await _context.Billdetails.Where(d => d.Billid == bill.Billid)
+                .Join(_context.Orders.Where(o => o.Status != "cancelled"), d => d.Orderid, o => o.Orderid, (d, o) => o.Orderid)
+                .ToListAsync();
+            if (activeIds.Count == 0)
+            {
+                return BadRequest(new { status = "Error", message = "Every order of this bill is cancelled. Cancel the bill instead." });
+            }
+            int? billDiscountId = bill.Billdetails.Select(d => d.Discountid).FirstOrDefault(d => d > 0) ?? bill.Discountid;
+            var amounts = await _calc.CalculateForOrdersAsync(bill.Branchid.GetValueOrDefault(), activeIds, billDiscountId, (double)(bill.Discount ?? 0m));
+            bill.Totalamount = (decimal)amounts.Total;
+            bill.Tax = (decimal)amounts.Tax;
+            bill.Subtotal = (decimal)amounts.SubTotal;
+            bill.Discount = (decimal)amounts.Discount;
+            bill.Extraamount = (decimal)amounts.ExtraAmount;
 
             bill.Paidamount = request.Paidamount;
             bill.Paymentmode = request.Paymentmode;
@@ -251,7 +294,7 @@ public class BillController : ControllerBase
             bill.Lifecyclestatus = request.Lifecyclestatus;
 
             var orders = await _context.Orders
-                .Where(o => o.Billingid == request.BillId)
+                .Where(o => o.Billingid == request.BillId && o.Status != "cancelled")
                 .ToListAsync();
 
             string orderStatus = (request.Lifecyclestatus == "finalized" || request.Lifecyclestatus == "complementary") ? "approved" : "submitted";
@@ -267,7 +310,8 @@ public class BillController : ControllerBase
             await _seating.ReleaseIfFreeAsync(orders.Select(o => o.Tableid), userid);
             // Same notifications as CreateBill: settling a printed bill must reach the KOT / table screens too.
             await SendOrderSettledAsync(bill, orders, tenant.Username);
-            if (!wasPaid && bill.Lifecyclestatus == "finalized")
+            // An edited bill settled again does not message the customer a second time.
+            if (!wasPaid && !wasReopened && bill.Lifecyclestatus == "finalized")
                 await SendPaymentWhatsAppAsync(bill);
 
             bool printFailed = false;
@@ -293,6 +337,154 @@ public class BillController : ControllerBase
         {
             return BadRequest(new { status = "Error", message = ex.Message + " " + ex.InnerException?.Message });
         }
+    }
+
+    public class BillChangeRequest
+    {
+        public string? Reason { get; set; }
+    }
+
+    // Cancels a settled (or reopened) bill of the open work period. Branch switch "ordercancel" must be on.
+    // The bill stays listed as cancelled (who / when / why) and is left out of every total.
+    // Branch heads and outlet owners only.
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HttpPost("{id}/Cancel")]
+    public async Task<IActionResult> CancelSettledBill(int id, [FromBody] BillChangeRequest request)
+    {
+        var tenant = await _tenant.GetAsync();
+        var (bill, error) = await LoadForChangeAsync(tenant, id, request?.Reason, edit: false);
+        if (bill == null)
+            return error!;
+
+        var orderIds = await _context.Billdetails.Where(d => d.Billid == bill.Billid).Select(d => d.Orderid).ToListAsync();
+        var orders = await _context.Orders.Where(o => orderIds.Contains(o.Orderid)).ToListAsync();
+        foreach (var o in orders)
+            o.Status = "cancelled";
+
+        bill.Lifecyclestatus = BillLifecycle.Cancelled;
+        bill.Status = "cancelled";
+        bill.Cancelreason = request!.Reason!.Trim();
+        bill.Cancelledby = tenant.UserId;
+        bill.Cancelledat = DateTime.Now;
+        bill.Updatedby = tenant.UserId;
+        await _context.SaveChangesAsync();
+
+        // A reopened bill had its orders open on a table: free it again.
+        await _seating.ReleaseIfFreeAsync(orders.Select(o => o.Tableid), tenant.UserId);
+        await SendOrderSettledAsync(bill, orders, tenant.Username);
+        await SendTableStatusAsync(bill, orders);
+        return Ok(new { status = "Success", message = $"Bill {bill.Billnumber} cancelled" });
+    }
+
+    // Reopens a settled bill of the open work period so its items can be changed: its orders are open again
+    // on the table (or the order type's screen); settling again keeps the bill number. Branch switch "orderedit" must be on.
+    [Authorize(Roles = "Admin,SuperAdmin,Captain")]
+    [HttpPost("{id}/Reopen")]
+    public async Task<IActionResult> ReopenSettledBill(int id, [FromBody] BillChangeRequest request)
+    {
+        var tenant = await _tenant.GetAsync();
+        var (bill, error) = await LoadForChangeAsync(tenant, id, request?.Reason, edit: true);
+        if (bill == null)
+            return error!;
+        if (bill.Branchid != tenant.BranchId)
+            return BadRequest(new { status = "Error", message = "Only a user of the bill's own branch can edit it, because new items are taken in your branch" });
+
+        var orderIds = await _context.Billdetails.Where(d => d.Billid == bill.Billid).Select(d => d.Orderid).ToListAsync();
+        var orders = await _context.Orders.Where(o => orderIds.Contains(o.Orderid) && o.Status != "cancelled").ToListAsync();
+        if (orders.Count == 0)
+            return BadRequest(new { status = "Error", message = "This bill has no orders left to edit" });
+
+        var tableIds = orders.Where(o => o.Tableid > 0).Select(o => o.Tableid!.Value).Distinct().ToList();
+        if (tableIds.Count > 1)
+            return BadRequest(new { status = "Error", message = "The orders of this bill are on different tables and cannot be reopened" });
+
+        Table? table = null;
+        int orderTypeId = orders[0].Ordertypeid.GetValueOrDefault();
+        if (tableIds.Count == 1)
+        {
+            table = await _context.Tables.FirstOrDefaultAsync(t => t.Tableid == tableIds[0]);
+            if (table == null)
+                return BadRequest(new { status = "Error", message = "The table of this bill no longer exists" });
+            bool inUse = table.Tablestate != TableStates.Available
+                || table.Mergedinto != null
+                || await _context.Tables.AnyAsync(t => t.Mergedinto == table.Tableid)
+                || await _seating.HasOpenOrdersAsync(table.Tableid)
+                || await _context.WaitlistTokens.AnyAsync(t => t.Tableid == table.Tableid && t.Status == TokenStatus.Called);
+            if (inUse)
+                return BadRequest(new { status = "Error", message = $"Table {table.Tablename} is in use. Free it first, then edit this bill." });
+        }
+        else if (await _context.Orders.AnyAsync(o => o.Branchid == bill.Branchid && o.Ordertypeid == orderTypeId
+                     && (o.Tableid == null || o.Tableid == 0) && o.Status == "submitted"))
+        {
+            // That screen lists every open order of the type, so one reopened bill at a time.
+            return BadRequest(new { status = "Error", message = "Another order of this type is still open. Settle it first, then edit this bill." });
+        }
+
+        foreach (var o in orders)
+        {
+            o.Status = "submitted";
+            o.PrintedF = false;
+        }
+        bill.Lifecyclestatus = BillLifecycle.Reopened;
+        bill.Reopenreason = request!.Reason!.Trim();
+        bill.Reopenedby = tenant.UserId;
+        bill.Reopenedat = DateTime.Now;
+        bill.Updatedby = tenant.UserId;
+        if (table != null)
+            _seating.SetState(table, TableStates.Occupied, tenant.UserId, TableEvents.StateChanged, notes: $"Bill {bill.Billnumber} reopened");
+        await _context.SaveChangesAsync();
+
+        await SendTableStatusAsync(bill, orders);
+        await _seating.NotifyAsync(bill.Branchid);
+        return Ok(new
+        {
+            status = "Success",
+            message = $"Bill {bill.Billnumber} reopened for editing",
+            data = new { billid = bill.Billid, tableid = table?.Tableid ?? 0, floorid = table?.Floorid ?? 0, tablename = table?.Tablename, ordertypeid = orderTypeId }
+        });
+    }
+
+    // Rules shared by cancel and reopen; returns the bill (tracked) or the refusal.
+    private async Task<(Billheader? Bill, IActionResult? Error)> LoadForChangeAsync(TenantInfo tenant, int id, string? reason, bool edit)
+    {
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > 250)
+            return (null, BadRequest(new { status = "Error", message = "A reason is required (up to 250 characters)" }));
+
+        var bill = await _context.Billheaders.ForBranch(tenant).FirstOrDefaultAsync(b => b.Billid == id);
+        if (bill == null)
+            return (null, NotFound(new { status = "Error", message = "Bill not found" }));
+
+        var rules = await BillChangeRulesAsync(new[] { bill.Branchid });
+        rules.TryGetValue(bill.Branchid.GetValueOrDefault(), out var rule);
+        if (edit ? rule?.Edit != true : rule?.Cancel != true)
+            return (null, BadRequest(new { status = "Error", message = edit ? "Editing settled bills is switched off for this branch" : "Cancelling settled bills is switched off for this branch" }));
+
+        bool stateOk = edit ? BillLifecycle.IsSettled(bill.Lifecyclestatus)
+                            : BillLifecycle.IsSettled(bill.Lifecyclestatus) || bill.Lifecyclestatus == BillLifecycle.Reopened;
+        if (!stateOk)
+            return (null, BadRequest(new { status = "Error", message = edit ? "Only a settled bill can be edited" : "Only a settled bill can be cancelled" }));
+
+        if (rule!.OpenDate == null || bill.Businessdate?.Date != rule.OpenDate.Value.ToDateTime(TimeOnly.MinValue))
+            return (null, BadRequest(new { status = "Error", message = "Only bills of the open work period can be changed" }));
+
+        return (bill, null);
+    }
+
+    private record BillChangeRule(bool Cancel, bool Edit, DateOnly? OpenDate);
+
+    // Per branch: the two switches and the business date of its open work period.
+    private async Task<Dictionary<int, BillChangeRule>> BillChangeRulesAsync(IEnumerable<int?> branchIds)
+    {
+        var ids = branchIds.Where(b => b.HasValue).Select(b => b!.Value).Distinct().ToList();
+        var rows = await _context.Branches.AsNoTracking().Where(b => ids.Contains(b.Branchid))
+            .Select(b => new
+            {
+                b.Branchid, b.Ordercancel, b.Orderedit,
+                OpenDate = _context.Workperiods.Where(w => w.Branchid == b.Branchid && w.Status == "open")
+                    .OrderByDescending(w => w.Date).Select(w => (DateOnly?)w.Date).FirstOrDefault()
+            })
+            .ToListAsync();
+        return rows.ToDictionary(r => r.Branchid, r => new BillChangeRule(r.Ordercancel, r.Orderedit, r.OpenDate));
     }
 
     // SignalR "OrderSettled" for every order of the bill (sent by CreateBill and UpdateBill).
@@ -536,7 +728,7 @@ public class BillController : ControllerBase
                 b.Billid, b.Billnumber, b.Billname, b.Gstin, b.Address, b.Customerid, b.Notes, b.Datetime, b.Phone,
                 b.Totalamount, b.Subtotal, b.Extraamount, b.Tax, b.Discount, b.Discountid, b.Taxid, b.Paidamount,
                 b.Paymentmode, b.Status, b.Complementaryreason, b.Iscomplementary, b.Businessdate, b.Lifecyclestatus,
-                b.Branchid, b.CreatedBy
+                b.Branchid, b.CreatedBy, b.Cancelreason, b.Cancelledby, b.Cancelledat, b.Reopenreason, b.Reopenedby, b.Reopenedat
             })
             .ToListAsync();
         var billIds = bills.Select(b => b.Billid).ToList();
@@ -565,7 +757,18 @@ public class BillController : ControllerBase
         var branchIdsUsed = bills.Select(b => b.Branchid).Distinct().ToList();
         var branchNames = await _context.Branches.AsNoTracking().Where(br => branchIdsUsed.Contains((int?)br.Branchid))
             .ToDictionaryAsync(br => br.Branchid, br => br.Branchname);
-        var userIdsUsed = bills.Select(b => b.CreatedBy).Distinct().ToList();
+        var userIdsUsed = bills.Select(b => b.CreatedBy).Concat(bills.Select(b => b.Cancelledby)).Concat(bills.Select(b => b.Reopenedby)).Distinct().ToList();
+        var changeRules = await BillChangeRulesAsync(bills.Select(b => b.Branchid));
+        bool canCancelRole = tenant.Role == AppRoles.Admin || tenant.Role == AppRoles.SuperAdmin;
+        bool CanChange(int? branch, DateTime? businessDate, string? lifecycle, bool edit)
+        {
+            if (!changeRules.TryGetValue(branch.GetValueOrDefault(), out var rule) || rule.OpenDate == null
+                || businessDate?.Date != rule.OpenDate.Value.ToDateTime(TimeOnly.MinValue))
+                return false;
+            return edit
+                ? rule.Edit && branch == tenant.BranchId && BillLifecycle.IsSettled(lifecycle)
+                : rule.Cancel && canCancelRole && (BillLifecycle.IsSettled(lifecycle) || lifecycle == BillLifecycle.Reopened);
+        }
         var userNames = await _context.Users.AsNoTracking().Where(u => userIdsUsed.Contains((int?)u.Userid))
             .ToDictionaryAsync(u => u.Userid, u => u.Username);
         var linesByOrder = lines.ToLookup(l => l.Orderid);
@@ -598,6 +801,14 @@ public class BillController : ControllerBase
             b.Lifecyclestatus,
             branch = b.Branchid is int bid ? branchNames.GetValueOrDefault(bid) : null,
             createdby = b.CreatedBy is int uid ? userNames.GetValueOrDefault(uid) : null,
+            cancelreason = b.Cancelreason,
+            cancelledat = b.Cancelledat,
+            cancelledby = b.Cancelledby is int cid ? userNames.GetValueOrDefault(cid) : null,
+            reopenreason = b.Reopenreason,
+            reopenedat = b.Reopenedat,
+            reopenedby = b.Reopenedby is int rid ? userNames.GetValueOrDefault(rid) : null,
+            canedit = CanChange(b.Branchid, b.Businessdate, b.Lifecyclestatus, edit: true),
+            cancancel = CanChange(b.Branchid, b.Businessdate, b.Lifecyclestatus, edit: false),
             Orders = ordersByBill[b.Billid].Select(d => new
             {
                 d.Orderid,
@@ -627,10 +838,12 @@ public class BillController : ControllerBase
             return Ok(new { status = "Success", message = "No bills found", data = (object)null });
         }
 
-        decimal totalAmount = list.Sum(b => b.Totalamount.GetValueOrDefault());
-        decimal subtotal = list.Sum(b => b.Subtotal.GetValueOrDefault());
+        // Cancelled bills are listed, but not counted.
+        var counted = list.Where(b => b.Lifecyclestatus != BillLifecycle.Cancelled).ToList();
+        decimal totalAmount = counted.Sum(b => b.Totalamount.GetValueOrDefault());
+        decimal subtotal = counted.Sum(b => b.Subtotal.GetValueOrDefault());
 
-        var orderTypeWiseTotals = list
+        var orderTypeWiseTotals = counted
             .SelectMany(b => b.Orders.Select(o => new
             {
                 o.Ordertypeid,
@@ -664,7 +877,7 @@ public class BillController : ControllerBase
             })
             .ToList();
 
-        var itemWiseOrders = list
+        var itemWiseOrders = counted
             .SelectMany(b => b.Orders)
             .SelectMany(o => o.OrderDetails)
             .Where(x => x.Qty > 0)
@@ -696,7 +909,7 @@ public class BillController : ControllerBase
     public async Task<IActionResult> GetDashbordReport(DateTime? fromDate, DateTime? toDate, int? branchId = null)
     {
         var tenant = await _tenant.GetAsync();
-        var query = _context.Billheaders.ForBranch(tenant, branchId)
+        var query = _context.Billheaders.NotCancelled().ForBranch(tenant, branchId)
             .Include(b => b.Billdetails)
                 .ThenInclude(d => d.Order)
             .AsQueryable();
@@ -773,7 +986,7 @@ public class BillController : ControllerBase
     public async Task<IActionResult> GetTableWiseBillSummary(DateTime? fromDate, DateTime? toDate, int? branchId = null)
     {
         var tenant = await _tenant.GetAsync();
-        var query = _context.Billheaders.ForBranch(tenant, branchId)
+        var query = _context.Billheaders.NotCancelled().ForBranch(tenant, branchId)
             .Include(b => b.Billdetails)
                 .ThenInclude(d => d.Order)
             .AsQueryable();
@@ -851,7 +1064,7 @@ public class BillController : ControllerBase
     {
         var tenant = await _tenant.GetAsync();
 
-        var query = _context.Billheaders.AsQueryable();
+        var query = _context.Billheaders.NotCancelled();
 
         query = query.ForBranch(tenant, branchId);
         if (fromDate.HasValue)
@@ -894,7 +1107,7 @@ public class BillController : ControllerBase
     {
         var tenant = await _tenant.GetAsync();
 
-        var query = _context.Billheaders.Where(x => x.Iscomplementary == true);
+        var query = _context.Billheaders.NotCancelled().Where(x => x.Iscomplementary == true);
 
         query = query.ForBranch(tenant, branchId);
         if (fromDate.HasValue)
@@ -941,7 +1154,7 @@ public class BillController : ControllerBase
     {
         var tenant = await _tenant.GetAsync();
 
-        var query = _context.Billheaders.AsQueryable();
+        var query = _context.Billheaders.NotCancelled();
 
         query = query.ForBranch(tenant, branchId);
         if (fromDate.HasValue)
@@ -974,7 +1187,7 @@ public class BillController : ControllerBase
     {
         var tenant = await _tenant.GetAsync();
 
-        var query = _context.Billheaders
+        var query = _context.Billheaders.NotCancelled()
             .Include(b => b.Billdetails)
                 .ThenInclude(d => d.Order)
             .AsQueryable();
@@ -1017,7 +1230,7 @@ public class BillController : ControllerBase
     {
         var tenant = await _tenant.GetAsync();
 
-        var query = _context.Billheaders.AsQueryable();
+        var query = _context.Billheaders.NotCancelled();
 
         query = query.ForBranch(tenant, branchId);
         if (fromDate.HasValue)

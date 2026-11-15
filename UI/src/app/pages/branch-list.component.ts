@@ -38,6 +38,8 @@ import { AlertService } from '@appservices/alert.service';
 			<th scope="col" >Alternateive Phone Number</th>
                         <th scope="col" >Website</th>
                         <th scope="col" >Express Stall</th>
+                        <th scope="col" title="Cancel a settled bill until the work period closes">Bill cancel</th>
+                        <th scope="col" title="Reopen a settled bill to change items until the work period closes">Bill edit</th>
                         <th scope="col" style="width:150px">Action</th>
 
                       </tr>
@@ -59,6 +61,16 @@ import { AlertService } from '@appservices/alert.service';
                           <td>
                             <div class="form-check form-switch">
                               <input class="form-check-input" type="checkbox" [checked]="bs.expressstall" (change)="toggleExpressStall(bs,$event)" [attr.aria-label]="'Express Stall for ' + bs.branchname" />
+                            </div>
+                          </td>
+                          <td>
+                            <div class="form-check form-switch">
+                              <input class="form-check-input" type="checkbox" [checked]="bs.ordercancel" (change)="toggleBillChange(bs,'ordercancel',$event)" [attr.aria-label]="'Bill cancel for ' + bs.branchname" />
+                            </div>
+                          </td>
+                          <td>
+                            <div class="form-check form-switch">
+                              <input class="form-check-input" type="checkbox" [checked]="bs.orderedit" (change)="toggleBillChange(bs,'orderedit',$event)" [attr.aria-label]="'Bill edit for ' + bs.branchname" />
                             </div>
                           </td>
                           <td class="custom-btn">                            
@@ -144,6 +156,24 @@ export class BranchListComponent implements OnInit {
       error:((err:any)=>{
         input.checked = !enabled;
         this.stateService.setLoadingState(false);
+        this.alertService.showAlert('Error !',err?.error?.message || 'Could not update the branch');
+      })
+    })
+  }
+
+  // Bill cancel / bill edit switches of this branch (no reload needed: the sales report asks the API each time).
+  toggleBillChange(branch:any, field:'ordercancel'|'orderedit', event:Event){
+    const input = event.target as HTMLInputElement;
+    const enabled = input.checked;
+    this.stateService.setLoadingState(true);
+    this.query.updateBranch({...branch,[field]:enabled}).pipe(
+      finalize(()=> this.stateService.setLoadingState(false))
+    ).subscribe({
+      next:(()=>{
+        branch[field] = enabled;
+      }),
+      error:((err:any)=>{
+        input.checked = !enabled;
         this.alertService.showAlert('Error !',err?.error?.message || 'Could not update the branch');
       })
     })

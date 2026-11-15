@@ -107,9 +107,6 @@ import { finalize } from 'rxjs';
               <div class="col-md-12">
                 <label for="description" name="description" class="col-form-label">Description</label>
                 <input type="text" value="" class="form-control" formControlName="description" />
-                <div *ngIf="floorForm.get('description')?.invalid && floorForm.get('description')?.touched">
-                  <small class="text-danger">Description is required.</small>
-                </div>
               </div>
             </div>
 
@@ -172,7 +169,7 @@ export class FloorListComponent {
 	  branchid:[1],
     floorname:['',Validators.required],    	
       capacity:[1,[Validators.required,Validators.pattern(/^\d+$/)]],     
-      description:['',Validators.required],
+      description:[''],
 	  status: [true],  
     })
 
