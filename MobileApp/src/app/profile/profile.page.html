@@ -1,0 +1,98 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Sales <span class="sub-title">{{ auth.session()?.branchName || auth.session()?.outletName }}</span></ion-title>
+  </ion-toolbar>
+  <ion-toolbar class="chips-bar">
+    <div class="chip-row">
+      @for (r of ranges; track r.id) {
+        <button class="pill" [class.active]="range() === r.id" (click)="setRange(r.id)">{{ r.label }}</button>
+      }
+    </div>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="refresh($event)"><ion-refresher-content></ion-refresher-content></ion-refresher>
+
+  @if (loading()) {
+    <div class="pad"><div class="skeleton hero-sk"></div><div class="kpis">@for (i of [1,2,3,4]; track i) { <div class="skeleton kpi-sk"></div> }</div></div>
+  } @else {
+    <div class="pad">
+      <div class="hero">
+        <span class="lbl">Net sales</span>
+        <div class="big money">₹{{ stats().total | number:'1.0-0' }}</div>
+        <div class="sub">
+          <span><ion-icon name="receipt-outline"></ion-icon>{{ stats().count }} bills</span>
+          <span><ion-icon name="trending-up-outline"></ion-icon>₹{{ stats().avg | number:'1.0-0' }} avg</span>
+          @if (stats().cancelled) { <span>{{ stats().cancelled }} cancelled</span> }
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><ion-icon name="wallet-outline" class="c-s"></ion-icon><b class="money">₹{{ stats().paid | number:'1.0-0' }}</b><span>Collected</span></div>
+        <div class="kpi"><ion-icon name="time-outline" class="c-w"></ion-icon><b class="money">₹{{ stats().unpaid | number:'1.0-0' }}</b><span>Unpaid · {{ stats().unpaidCount }}</span></div>
+        <div class="kpi"><ion-icon name="stats-chart-outline" class="c-p"></ion-icon><b class="money">₹{{ stats().tax | number:'1.0-0' }}</b><span>Tax</span></div>
+        <div class="kpi"><ion-icon name="gift-outline" class="c-m"></ion-icon><b class="money">₹{{ stats().comp | number:'1.0-0' }}</b><span>Complimentary · {{ stats().compCount }}</span></div>
+      </div>
+
+      @if (!stats().count) {
+        <div class="empty"><ion-icon name="receipt-outline"></ion-icon><h3>No bills</h3><p>No sales in this period yet.</p></div>
+      } @else {
+        @if (byMode().length) {
+          <div class="section-title">Payment modes</div>
+          <div class="card">
+            @for (s of byMode(); track s.label) {
+              <div class="bar-row">
+                <div class="row-between"><span class="nm">{{ s.label }}</span><span class="money v">₹{{ s.value | number:'1.0-0' }} <small>{{ s.pct }}%</small></span></div>
+                <div class="track"><i [style.width.%]="s.pct"></i></div>
+              </div>
+            }
+          </div>
+        }
+
+        @if (byType().length > 1) {
+          <div class="section-title">Order types</div>
+          <div class="card">
+            @for (s of byType(); track s.label) {
+              <div class="bar-row">
+                <div class="row-between"><span class="nm">{{ s.label }}</span><span class="money v">₹{{ s.value | number:'1.0-0' }} <small>{{ s.pct }}%</small></span></div>
+                <div class="track alt"><i [style.width.%]="s.pct"></i></div>
+              </div>
+            }
+          </div>
+        }
+
+        @if (topItems().length) {
+          <div class="section-title">Top dishes</div>
+          <div class="card">
+            @for (x of topItems(); track x.name; let i = $index) {
+              <div class="top">
+                <span class="rank">{{ i + 1 }}</span>
+                <div class="t-main">
+                  <div class="row-between"><span class="nm">{{ x.name }}</span><span class="muted">{{ x.qty }} sold</span></div>
+                  <div class="track thin"><i [style.width.%]="x.pct"></i></div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        <div class="section-title">Recent bills</div>
+        <div class="card bills">
+          @for (b of recent(); track b.billid) {
+            <div class="bill">
+              <div>
+                <b>{{ b.billnumber || ('#' + b.billid) }}</b>
+                <div class="muted">{{ b.billname || 'Walk-in' }} · {{ b.datetime | date:'d MMM, h:mm a' }}</div>
+              </div>
+              <div class="r">
+                <b class="money">₹{{ b.totalamount | number:'1.0-2' }}</b>
+                <span class="badge" [class]="'badge ' + billBadge(b).cls">{{ billBadge(b).label }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</ion-content>

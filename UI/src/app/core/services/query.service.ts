@@ -44,6 +44,32 @@ private branchDirectory$:any;
     this.branchDirectory$ = undefined;
   }
 
+  // Called after a master screen saves a category / menu / menu type / order type / branch,
+  // so the order screens pick up the change (e.g. a category's Express Stall flag) without a re-login.
+  clearMenuCache(): void {
+    this.getFoodMenuList$ = undefined;
+    this.getOrderTypeList$ = undefined;
+  }
+
+  // What the API is: Standalone, Branch (shop server, uploads) or Cloud (online server, view only).
+  // Cached for the app's lifetime; an old API without the endpoint counts as Standalone.
+  private serverMode$?: Observable<{ mode: string; readOnly: boolean }>;
+  getServerMode(): Observable<{ mode: string; readOnly: boolean }> {
+    if (!this.serverMode$) {
+      this.serverMode$ = this.http.get(AppSettings.apiUrl + 'Sync/Mode').pipe(
+        map((res: any) => ({ mode: res?.data?.mode ?? 'Standalone', readOnly: !!res?.data?.readOnly })),
+        catchError(() => of({ mode: 'Standalone', readOnly: false })),
+        shareReplay(1)
+      );
+    }
+    return this.serverMode$;
+  }
+
+  // Branch: how the upload to the online server is doing. Online: last upload of each branch.
+  getSyncStatus(): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'Sync/Status').pipe(map((res: any) => res?.data));
+  }
+
   // Branches the user may see (all branches of the outlet for an owner), cached for the session.
   getBranchDirectory(): Observable<any[]> {
     if (!this.branchDirectory$) {
@@ -486,6 +512,7 @@ private branchDirectory$:any;
         fromDate: paramObj.fromDate.toString(),
         toDate: paramObj.toDate.toString(),
         orderType:paramObj.ordertype ? paramObj.ordertype :'',
+        orderTypeId:paramObj.orderTypeId ? String(paramObj.orderTypeId) : '',
         status:paramObj.status
       }}).pipe(
         map((res:any)=>{

@@ -2,6 +2,7 @@ using FoodApiService.Models;
 using FoodApiService.Interface;
 using FoodApiService.Repositary;
 using FoodApiService.Service;
+using FoodApiService.Service.Sync;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -91,7 +92,16 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<BackgroundPrinter>
 builder.Services.AddSingleton<OrderAlertNotifier>();
 // Order / bill amounts are calculated on the server (appsettings BillingSettings:TaxInclusive).
 builder.Services.AddScoped<BillCalculator>();
-builder.Services.AddHostedService<OrderDelayMonitor>();
+// Offline branch servers + online (view-only) server: appsettings "Sync". Standalone when absent.
+var syncSettings = builder.Configuration.GetSection("Sync").Get<SyncSettings>() ?? new SyncSettings();
+syncSettings.ConnectionString = connectionString!;
+builder.Services.AddSingleton(syncSettings);
+builder.Services.AddSingleton<SyncIngest>();
+builder.Services.AddHttpClient(nameof(SyncUploader));
+builder.Services.AddHostedService<SyncUploader>();
+// The online server holds copies of the branches' orders: no delay alerts there (the branch raises them).
+if (!syncSettings.IsCloud)
+    builder.Services.AddHostedService<OrderDelayMonitor>();
 // WhatsApp messages to customers (appsettings WhatsAppSettings, off by default).
 builder.Services.AddHttpClient(nameof(WhatsAppService));
 builder.Services.AddSingleton<WhatsAppService>();
@@ -130,6 +140,10 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Branch / Cloud mode: sync columns, triggers and this branch's id range, before the API takes requests.
+// A wrong Sync:BranchId stops the API here, so new rows never get ids of another branch.
+await SyncSchema.EnsureAsync(syncSettings, app.Services.GetRequiredService<ILogger<Program>>());
+
 // Any password still stored in plain text is hashed once, before the API takes requests.
 using (var scope = app.Services.CreateScope())
 {
@@ -142,6 +156,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 app.UseRouting();
 app.UseCors("AllowAll");
+app.UseCloudReadOnly(syncSettings);
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapHub<KOTNotificationHub>("/kotHub");

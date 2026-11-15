@@ -63,7 +63,9 @@ public class WhatsAppEvent
 
 public record WhatsAppMessage(string Event, string To, string? Template, string? Language, IReadOnlyList<string> Parameters, string Text);
 
-public record WhatsAppResult(bool Ok, string Detail);
+// Retry = the message did not get through for a passing reason (no internet, timeout, WhatsApp busy):
+// the sender keeps it and tries again, so a branch that is offline still sends it once it is back online.
+public record WhatsAppResult(bool Ok, string Detail, bool Retry = false);
 
 // Builds the customer messages and queues them; WhatsAppSender delivers them in the background,
 // so a slow or failing WhatsApp API never delays an order or a bill.
@@ -206,12 +208,13 @@ public class WhatsAppService
                 return new WhatsAppResult(true, answer);
             }
             _logger.LogWarning("WhatsApp {Event} to {To} failed: {Status} {Answer}", message.Event, Mask(message.To), (int)response.StatusCode, answer);
-            return new WhatsAppResult(false, $"{(int)response.StatusCode}: {answer}");
+            int code = (int)response.StatusCode;
+            return new WhatsAppResult(false, $"{code}: {answer}", Retry: code == 429 || code >= 500);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            _logger.LogWarning(ex, "WhatsApp {Event} to {To} failed", message.Event, Mask(message.To));
-            return new WhatsAppResult(false, ex.Message);
+            _logger.LogWarning("WhatsApp {Event} to {To} failed: {Error}", message.Event, Mask(message.To), ex.Message);
+            return new WhatsAppResult(false, ex.Message, Retry: ex is HttpRequestException or TaskCanceledException);
         }
     }
 
@@ -244,19 +247,44 @@ public class WhatsAppService
     private static string Mask(string to) => to.Length <= 4 ? to : new string('*', to.Length - 4) + to[^4..];
 }
 
-// Sends the queued messages one by one.
+// Sends the queued messages one by one. While the internet is down (branch server offline) the message
+// at the front is kept and tried again with a growing pause (30 s up to 5 min), the rest wait behind it in
+// order. A message still not sent after MaxAge is dropped: an "order placed" note hours later only confuses.
+// The queue lives in memory, so messages waiting when the API restarts are lost.
 public class WhatsAppSender : BackgroundService
 {
+    private static readonly TimeSpan MaxAge = TimeSpan.FromHours(6);
     private readonly WhatsAppService _whatsApp;
+    private readonly ILogger<WhatsAppSender> _logger;
 
-    public WhatsAppSender(WhatsAppService whatsApp) => _whatsApp = whatsApp;
+    public WhatsAppSender(WhatsAppService whatsApp, ILogger<WhatsAppSender> logger)
+    {
+        _whatsApp = whatsApp;
+        _logger = logger;
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
             await foreach (var message in _whatsApp.Reader.ReadAllAsync(stoppingToken))
-                await _whatsApp.DeliverAsync(message, stoppingToken);
+            {
+                var queuedAt = DateTime.UtcNow;
+                var pause = TimeSpan.FromSeconds(30);
+                while (true)
+                {
+                    var result = await _whatsApp.DeliverAsync(message, stoppingToken);
+                    if (result.Ok || !result.Retry)
+                        break;
+                    if (DateTime.UtcNow - queuedAt > MaxAge)
+                    {
+                        _logger.LogWarning("WhatsApp {Event} dropped: not sent within {Hours} hours", message.Event, MaxAge.TotalHours);
+                        break;
+                    }
+                    await Task.Delay(pause, stoppingToken);
+                    pause = TimeSpan.FromSeconds(Math.Min(300, pause.TotalSeconds * 2));
+                }
+            }
         }
         catch (OperationCanceledException) { }
     }

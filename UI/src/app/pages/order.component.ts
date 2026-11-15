@@ -454,7 +454,6 @@ export interface IShortBillForReport {
               @if (typeId != 1) {
                 <div class="pay-inline no-print">
                   <div class="pay-modes" role="group" aria-label="Payment mode">
-                    <span class="pay-label">Payment</span>
                     @for (m of payModes; track m.value) {
                       <button type="button" class="btn btn-sm" [class.btn-primary]="payMode === m.value" [class.btn-outline-primary]="payMode !== m.value" (click)="setPayMode(m.value)">
                         <i [class]="m.icon"></i> {{ m.label }}
@@ -463,16 +462,14 @@ export interface IShortBillForReport {
                   </div>
                   @if (payMode === 'cash') {
                     <div class="pay-detail">
-                      <label for="cashReceived">Cash received</label>
-                      <input id="cashReceived" type="number" min="0" step="any" class="form-control form-control-sm" [(ngModel)]="cashReceived" [placeholder]="postBill.totalAmount" />
+                      <input id="cashReceived" type="number" min="0" step="any" class="form-control form-control-sm" [(ngModel)]="cashReceived" placeholder="Cash received" aria-label="Cash received" />
                       @if (cashChange !== null) {
                         <span class="pay-change" [class.short]="cashChange < 0">{{ cashChangeText }}</span>
                       }
                     </div>
                   } @else {
                     <div class="pay-detail">
-                      <label for="payRef">{{ payMode === 'card' ? 'Card ref / last 4 digits' : 'UPI ref no.' }}</label>
-                      <input id="payRef" type="text" maxlength="40" class="form-control form-control-sm" [(ngModel)]="payRef" placeholder="Optional" />
+                      <input id="payRef" type="text" maxlength="40" class="form-control form-control-sm" [(ngModel)]="payRef" [placeholder]="payMode === 'card' ? 'Card ref / last 4 (optional)' : 'UPI ref no. (optional)'" [attr.aria-label]="payMode === 'card' ? 'Card reference' : 'UPI reference'" />
                     </div>
                   }
                 </div>
@@ -786,11 +783,11 @@ export interface IShortBillForReport {
   styles: `
     .table-ops, .guest-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
     .guest-tabs { padding-top: 0; }
-    .pay-inline { display: flex; flex-direction: column; gap: 8px; padding: 10px 15px; border-top: 1px solid var(--rp-border); background: var(--rp-surface-alt); }
+    .pay-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 15px; border-top: 1px solid var(--rp-border); background: var(--rp-surface-alt); }
     .pay-modes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
     .pay-label, .pay-detail label { font-size: var(--rp-fs-xs); color: var(--rp-text-muted); margin: 0 4px 0 0; }
-    .pay-detail { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-    .pay-detail .form-control { width: 160px; }
+    .pay-detail { display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 0; }
+    .pay-detail .form-control { width: 100%; max-width: 200px; }
     .pay-change { font-weight: 600; color: #198754; }
     .pay-change.short { color: #dc3545; }
   `,
@@ -1282,6 +1279,13 @@ width: 150px;
       // drop the unsent order and re-pick the categories for the new order type.
       if (previousTypeId != null && previousTypeId != this.typeId) {
         await this.resetPostBill();
+        this.applyMenuFilter();
+        // Reload the bill list for the new order type (Take away / Express Stall / Home Delivery).
+        this.getAllOrderlist = [];
+        if (this.typeId != 1) this.getOrderReport(new Date(), new Date(), 'all');
+      } else if (previousTypeId == null) {
+        // First visit: the menu / order types may already be cached (e.g. coming from a master screen),
+        // in which case they were filtered before the order type was known. Filter again now.
         this.applyMenuFilter();
       }
       this.getOrderByTable(this.tableId, this.typeId);
@@ -2384,12 +2388,15 @@ width: 150px;
     let getObject = {
       fromDate: convertFromDate,
       toDate: convertToDate,
-      ordertype: 'Takeaway',
+      orderTypeId: this.typeId,
       status: status,
     };
 
+    const requestedTypeId = this.typeId;
     this.query.getShortBillForReport(getObject).subscribe({
       next: (res: any) => {
+        // Ignore a late reply for a screen the user already left.
+        if (requestedTypeId != this.typeId) return;
         this.getAllOrderlist = res.data;
         console.log(this.getAllOrderlist, 'get-all-order-list');
       },

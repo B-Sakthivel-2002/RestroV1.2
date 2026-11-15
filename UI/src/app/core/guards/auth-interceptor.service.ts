@@ -7,13 +7,20 @@ import { Router } from '@angular/router';
 
 import {
   catchError,
+  tap,
   throwError
 } from 'rxjs';
+import { QueryService } from '../services/query.service';
+
+// Writes to these masters change what the order screens show; their cached menu / order types must be dropped.
+const MENU_MASTER_WRITE = /\/(Categories|Items|MealType|OrderType|Branches)(\/|$|\?)/i;
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   const token = localStorage.getItem('authToken');
   const router = inject(Router);
+  const query = inject(QueryService);
+  const clearsMenuCache = req.method !== 'GET' && MENU_MASTER_WRITE.test(req.url);
 
   let authReq = req;
 
@@ -26,6 +33,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   }
 
   return next(authReq).pipe(
+    tap({ complete: () => { if (clearsMenuCache) query.clearMenuCache(); } }),
     catchError((err: any) => {
 
       switch (err.status) {

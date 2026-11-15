@@ -20,7 +20,8 @@ import { OrderAlertsComponent } from '../shared/component/order-alerts.component
               <span class="brand-mark"><i class="pi pi-shop"></i></span>
               <span class="brand-text">
                 <span class="brand-title">{{branchName || appName}}</span>
-                @if (branchName) { <span class="brand-sub">{{appName}}</span> }
+                @if (readOnly) { <span class="brand-sub">Online view · read only</span> }
+                @else if (branchName) { <span class="brand-sub">{{appName}}</span> }
               </span>
             </a>
           </div>
@@ -89,6 +90,8 @@ export class HeaderComponent implements OnInit {
   appName: string = AppSettings.appName;
   // display only: the branch the user signed in to (stored by AuthService at login)
   branchName: string = localStorage.getItem('branchname') || '';
+  // Online server: everything is view only.
+  readOnly = false;
 
   constructor(
     private queryService: QueryService,
@@ -111,6 +114,7 @@ export class HeaderComponent implements OnInit {
         if (res.status == 'success') {
           this.menuList = res.menu;
           this.addExpressStallMenu();
+          this.applyServerMode();
         }
 
         
@@ -119,14 +123,31 @@ export class HeaderComponent implements OnInit {
     });
   }
 
+  // Online server (view only): just the reports, Sync Status and Logout. Branch server: Sync Status in Settings.
+  // The menu constants are shared, so the lists are copied, never changed in place.
+  applyServerMode() {
+    this.queryService.getServerMode().subscribe((m) => {
+      if (m.mode === 'Standalone') return;
+      this.readOnly = m.readOnly;
+      const syncItem = { name: 'Sync Status', url: '/settings/sync', icon: 'preferences' };
+      this.menuList = this.menuList
+        .filter((x: any) => !m.readOnly || x.name === 'Report' || x.name === 'Settings')
+        .map((x: any) => x.name !== 'Settings' ? x : {
+          ...x,
+          submenu: [syncItem, ...x.submenu.filter((s: any) => !m.readOnly || s.name === 'Logout')]
+        });
+    });
+  }
+
   // Shown next to Take away only when the user's branch has Express Stall switched on.
   addExpressStallMenu() {
-    const takeAway = this.menuList.findIndex((m: any) => m.name === 'Take away');
-    if (takeAway < 0) return;
+    if (this.menuList.findIndex((m: any) => m.name === 'Take away') < 0) return;
     this.queryService.getOrderTypes().subscribe({
       next: (res: any) => {
         const stall = res.expressStall ? (res.data || []).find((ot: any) => isExpressStallType(ot)) : null;
-        if (!stall || this.menuList.some((m: any) => m.name === 'Express Stall')) return;
+        // Looked up again: the online view may have removed Take away meanwhile.
+        const takeAway = this.menuList.findIndex((m: any) => m.name === 'Take away');
+        if (!stall || takeAway < 0 || this.menuList.some((m: any) => m.name === 'Express Stall')) return;
         this.menuList = [
           ...this.menuList.slice(0, takeAway + 1),
           { name: 'Express Stall', url: '/order/0/0/' + stall.ordertypeid, icon: 'pi pi-bolt icon', submenu: [] },

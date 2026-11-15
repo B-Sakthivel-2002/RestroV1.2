@@ -34,7 +34,12 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginModel model)
     {
-        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == model.username && u.Status == true);
+        // On the online server several branches may have the same username; their copies carry no password
+        // (only logins made online have one), so the one with a password is tried.
+        var user = await _context.Users.AsNoTracking()
+            .Where(u => u.Username == model.username && u.Status == true)
+            .OrderByDescending(u => u.Password != null)
+            .FirstOrDefaultAsync();
         if (!PasswordSecurity.Verify(user?.Password, _encryption.Decrypt(model.password)))
         {
             return Ok(new { status = "Error", message = "Invalid credentials", data = (object)null });

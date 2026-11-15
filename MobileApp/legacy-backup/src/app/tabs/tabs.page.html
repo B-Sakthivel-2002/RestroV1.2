@@ -1,0 +1,45 @@
+<ion-tabs>
+  <ion-tab-bar slot="bottom" class="app-tab-bar">
+    @if (canShowTab('kot')) {
+      <ion-tab-button tab="kot" href="/tabs/kot">
+        <ion-icon aria-hidden="true" name="receipt-outline"></ion-icon>
+        <ion-label>KOT</ion-label>
+      </ion-tab-button>
+    }
+
+    @if (canShowTab('dinein')) {
+      <ion-tab-button tab="dinein" href="/tabs/dinein">
+        <ion-icon aria-hidden="true" name="restaurant-outline"></ion-icon>
+        <ion-label>Dine In</ion-label>
+      </ion-tab-button>
+    }
+
+    @if (canShowTab('captain')) {
+      <ion-tab-button tab="captain" href="/tabs/captain">
+        <ion-icon aria-hidden="true" name="people-outline"></ion-icon>
+        <ion-label>Captain</ion-label>
+      </ion-tab-button>
+    }
+
+    @if (canShowTab('orders')) {
+      <ion-tab-button tab="orders" href="/tabs/orders">
+        <ion-icon aria-hidden="true" name="clipboard-outline"></ion-icon>
+        <ion-label>Orders</ion-label>
+      </ion-tab-button>
+    }
+
+    @if (canShowTab('profile')) {
+      <ion-tab-button tab="profile" href="/tabs/profile">
+        <ion-icon aria-hidden="true" name="person-circle-outline"></ion-icon>
+        <ion-label>Profile</ion-label>
+      </ion-tab-button>
+    }
+
+    @if (canShowTab('logout')) {
+      <ion-tab-button (click)="logout()" class="logout-tab-button">
+        <ion-icon aria-hidden="true" name="log-out-outline"></ion-icon>
+        <ion-label>Logout</ion-label>
+      </ion-tab-button>
+    }
+  </ion-tab-bar>
+</ion-tabs>

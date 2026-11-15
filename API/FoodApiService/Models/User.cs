@@ -10,7 +10,8 @@ public class User : IBranchScoped
 
     // One-way hash (see PasswordSecurity). Never written to a response.
     [JsonIgnore]
-    public string Password { get; set; }
+    // Null on the online server for logins copied from a branch (passwords stay on the branch).
+    public string? Password { get; set; }
 
     public bool? Status { get; set; }
 

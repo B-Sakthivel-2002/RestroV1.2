@@ -14,6 +14,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { AlertService } from '@appservices/alert.service';
 import { Router } from '@angular/router';
 import { StateService } from '@appservices/state.service';
+import { SyncStatusComponent } from './sync-status.component';
 
 interface PostBillType {
   status: string;
@@ -39,7 +40,7 @@ export interface Order {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, SyncStatusComponent],
   providers: [BsModalService, AlertService],
   template: `
     <div class="wrapper">
@@ -50,6 +51,8 @@ export interface Order {
           </div>
         </div>
         <div class="cnt">
+          <app-sync-status [compact]="true"></app-sync-status>
+          @if (!readOnly) {
           <div class="row">
             <div class="col-12">
               <div class="wrk-prd-bg">
@@ -86,6 +89,7 @@ export interface Order {
               </div>
             </div>
           </div>
+          }
 
      
         <div class="row">
@@ -152,11 +156,16 @@ export interface Order {
 })
 export class DashboardComponent implements OnInit {
   
+  // Online server: no Work Period / KOT / billing shortcuts, only the reports.
+  readOnly = false;
+
   constructor(
     private router: Router,
+    private query: QueryService,
   ) {}
 
   ngOnInit(): void {
+    this.query.getServerMode().subscribe((m) => (this.readOnly = m.readOnly));
    // this.getOrderInit();   
   }
 

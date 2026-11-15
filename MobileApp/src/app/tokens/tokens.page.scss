@@ -1,0 +1,73 @@
+.live { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; font-size: 12px; font-weight: 600; color: var(--app-muted); }
+
+.seg-bar { --min-height: 52px; }
+.seg {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 0 16px 8px; padding: 4px;
+  background: var(--app-surface-alt); border-radius: 12px;
+  button { border: 0; background: transparent; border-radius: 9px; padding: 9px; font-weight: 700; font-size: 14px; color: var(--app-muted);
+    span { margin-left: 4px; font-size: 12px; opacity: .8; } }
+  button.active { background: var(--app-surface); color: var(--app-text); box-shadow: var(--app-shadow); }
+}
+
+.stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 14px 16px 2px;
+  > div { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; padding: 8px 4px; text-align: center; }
+  b { display: block; font-size: 20px; font-weight: 800; }
+  span { font-size: 11px; color: var(--app-muted); font-weight: 600; }
+  .w { color: var(--ion-color-warning); } .c { color: var(--ion-color-primary); } .s { color: var(--ion-color-success); } .f { color: var(--app-text); }
+}
+
+.list { padding: 12px 16px 96px; }
+.sk { height: 120px; margin-bottom: 12px; }
+
+.tk {
+  padding: 14px; transition: opacity .2s;
+  &.busy { opacity: .55; pointer-events: none; }
+  &.called { border-color: rgba(67, 97, 238, .45); box-shadow: 0 0 0 3px rgba(67, 97, 238, .08), var(--app-shadow); }
+  &.done { padding: 12px 14px; }
+}
+.tk-top { display: flex; align-items: flex-start; gap: 12px; }
+.code {
+  flex: 0 0 auto; min-width: 72px; text-align: center; padding: 8px 10px; border-radius: 12px;
+  background: var(--app-primary-soft); color: var(--ion-color-primary); font-weight: 900; font-size: 18px; letter-spacing: .5px;
+  &.sm { min-width: 62px; font-size: 15px; padding: 6px 8px; background: var(--app-surface-alt); color: var(--app-text); }
+}
+.who { flex: 1; min-width: 0; }
+.name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 3px; font-size: 13px; color: var(--app-muted);
+  ion-icon { font-size: 14px; margin-left: 4px; &:first-child { margin-left: 0; } }
+}
+.badges { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.table-line {
+  display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 10px; border-radius: 10px;
+  background: var(--app-primary-soft); font-size: 13px; ion-icon { color: var(--ion-color-primary); }
+}
+.notes { margin-top: 8px; font-size: 13px; font-style: italic; color: var(--app-muted); }
+.when { font-size: 12px; margin-top: 6px; text-align: right; }
+
+.actions {
+  display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  .btn { flex: 1; }
+  a.icon-btn { text-decoration: none; color: var(--ion-color-success); }
+  .icon-btn.danger { color: var(--ion-color-danger); }
+}
+
+ion-fab-button { --box-shadow: var(--app-shadow-lg); }
+
+.picker {
+  padding: 18px 16px calc(env(safe-area-inset-bottom) + 16px); height: 100%; overflow-y: auto; background: var(--app-surface);
+  h3 { margin: 0; font-size: 18px; font-weight: 800; }
+  p { margin: 4px 0 0; font-size: 13px; }
+}
+.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin: 16px 0; }
+.pick {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px; border-radius: 12px; text-align: left;
+  border: 1.5px solid var(--app-border); background: var(--app-surface); color: var(--app-text);
+  b { font-size: 16px; } span { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--app-muted); }
+  small { font-size: 11px; color: var(--app-muted); }
+  &.active { border-color: var(--ion-color-primary); background: var(--app-primary-soft); }
+  &:disabled { opacity: .35; }
+}
+.pick-sum { font-size: 13px; font-weight: 600; color: var(--ion-color-success); margin-bottom: 12px; &.short { color: var(--ion-color-danger); } }
+.pick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

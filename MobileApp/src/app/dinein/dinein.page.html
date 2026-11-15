@@ -1,0 +1,65 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>
+      Tables
+      <span class="sub-title">{{ auth.session()?.branchName || 'Dine in' }}</span>
+    </ion-title>
+    <ion-buttons slot="end">
+      <span class="live" [title]="liveStatus()">
+        <i class="live-dot" [class.off]="liveStatus() !== 'connected'"></i>
+        {{ liveStatus() === 'connected' ? 'Live' : 'Connecting' }}
+      </span>
+    </ion-buttons>
+  </ion-toolbar>
+  @if (floors().length > 1) {
+    <ion-toolbar class="chips-bar">
+      <div class="chip-row">
+        @for (f of floors(); track f.floorid) {
+          <button class="pill" [class.active]="floorId() === f.floorid" (click)="floorId.set(f.floorid)">
+            {{ f.floorname }}
+            @if (floorCount(f.floorid)) { <span class="count">{{ floorCount(f.floorid) }}</span> }
+          </button>
+        }
+      </div>
+    </ion-toolbar>
+  }
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="refresh($event)"><ion-refresher-content></ion-refresher-content></ion-refresher>
+
+  <div class="stats">
+    <div class="s free"><b>{{ counts().free }}</b><span>Free</span></div>
+    <div class="s busy"><b>{{ counts().busy }}</b><span>Occupied</span></div>
+    <div class="s billed"><b>{{ counts().billed }}</b><span>Billed</span></div>
+    <div class="s reserved"><b>{{ counts().reserved }}</b><span>Reserved</span></div>
+  </div>
+
+  @if (loading()) {
+    <div class="grid">
+      @for (i of [1,2,3,4,5,6,7,8,9]; track i) { <div class="skeleton tile-sk"></div> }
+    </div>
+  } @else if (!visible().length) {
+    <div class="empty">
+      <ion-icon name="grid-outline"></ion-icon>
+      <h3>No tables</h3>
+      <p>Add floors and tables in the web app under Master › Floors / Tables.</p>
+    </div>
+  } @else {
+    <div class="grid">
+      @for (x of visible(); track x.t.tableid) {
+        <button class="tile" [class]="'tile k-' + x.kind" (click)="open(x)">
+          <div class="row-between">
+            <span class="name">{{ x.t.tablename }}</span>
+            @if (x.t.capacity) { <span class="cap"><ion-icon name="people-outline"></ion-icon>{{ x.t.capacity }}</span> }
+          </div>
+          <span class="state">{{ x.label }}</span>
+          @if (x.sub) { <span class="sub">{{ x.sub }}</span> }
+          @if ((x.kind === 'kitchen' || x.kind === 'billed') && x.t.orderTotalAmount > 0) {
+            <span class="amt money">₹{{ x.t.orderTotalAmount | number:'1.0-2' }}</span>
+          }
+        </button>
+      }
+    </div>
+  }
+</ion-content>

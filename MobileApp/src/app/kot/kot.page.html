@@ -1,0 +1,91 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>
+      {{ mode() === 'kitchen' ? 'Kitchen' : 'Captain' }}
+      <span class="sub-title">
+        @if (filter() === 'submitted') {
+          {{ mode() === 'kitchen' ? pendingItems() + ' to cook' : readyItems() + ' ready to serve' }}
+        } @else { Today }
+      </span>
+    </ion-title>
+    <ion-buttons slot="end">
+      <span class="live"><i class="live-dot" [class.off]="liveStatus() !== 'connected'"></i>{{ liveStatus() === 'connected' ? 'Live' : 'Connecting' }}</span>
+    </ion-buttons>
+  </ion-toolbar>
+  @if (canSwitch()) {
+    <ion-toolbar class="seg-bar">
+      <div class="seg two role-switch">
+        <button [class.active]="mode() === 'kitchen'" (click)="setMode('kitchen')"><ion-icon name="flame-outline"></ion-icon> Kitchen</button>
+        <button [class.active]="mode() === 'pickup'" (click)="setMode('pickup')"><ion-icon name="hand-left-outline"></ion-icon> Captain (serve)</button>
+      </div>
+    </ion-toolbar>
+  }
+  <ion-toolbar class="seg-bar">
+    <div class="seg">
+      <button [class.active]="filter() === 'submitted'" (click)="setFilter('submitted')">Active</button>
+      <button [class.active]="filter() === 'approved'" (click)="setFilter('approved')">Done</button>
+      <button [class.active]="filter() === 'cancelled'" (click)="setFilter('cancelled')">Cancelled</button>
+    </div>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="refresh($event)"><ion-refresher-content></ion-refresher-content></ion-refresher>
+
+  @if (loading()) {
+    <div class="list">@for (i of [1,2,3]; track i) { <div class="skeleton sk"></div> }</div>
+  } @else if (!sorted().length) {
+    <div class="empty">
+      <ion-icon [name]="mode() === 'kitchen' ? 'flame-outline' : 'hand-left-outline'"></ion-icon>
+      <h3>{{ filter() === 'submitted' ? 'All caught up' : 'Nothing here' }}</h3>
+      <p>{{ filter() === 'submitted' ? 'New KOTs appear here instantly.' : 'No orders for today.' }}</p>
+    </div>
+  } @else {
+    <div class="list">
+      @for (o of sorted(); track o.orderid) {
+        <div class="kot card" [class.has-ready]="mode() === 'pickup' && readyCount(o) > 0 && filter() === 'submitted'">
+          <div class="kot-head">
+            <div>
+              <div class="no">#{{ o.ordernumber || o.orderid }}</div>
+              <div class="meta">
+                <span class="badge b-muted">{{ o.orderTypeName || 'Order' }}</span>
+                @if (o.waiter) { <span><ion-icon name="person-outline"></ion-icon>{{ o.waiter }}</span> }
+              </div>
+            </div>
+            @if (filter() === 'submitted') {
+              @if (mode() === 'kitchen' && pendingCount(o) > 1) {
+                <button class="btn sm success" (click)="actAll(o)"><ion-icon name="checkmark-done-outline"></ion-icon> All ready</button>
+              } @else if (mode() === 'pickup' && readyCount(o) > 1) {
+                <button class="btn sm primary" (click)="actAll(o)"><ion-icon name="checkmark-done-outline"></ion-icon> Serve all</button>
+              }
+            } @else {
+              <span class="badge" [class.b-success]="filter() === 'approved'" [class.b-danger]="filter() === 'cancelled'">
+                {{ filter() === 'approved' ? 'Done' : 'Cancelled' }}
+              </span>
+            }
+          </div>
+
+          @if (o.comments) {
+            <div class="comment"><ion-icon name="chatbubble-ellipses-outline"></ion-icon>{{ o.comments }}</div>
+          }
+
+          <div class="items">
+            @for (d of o.orderdetails; track d.orderdetailid) {
+              <div class="it" [class]="'it st-' + itemState(d)">
+                <span class="qty">{{ d.qty }}×</span>
+                <span class="nm">{{ d.itemName }}</span>
+                @if (canAct(d)) {
+                  <button class="act" [class.pick]="mode() === 'pickup'" (click)="act(o, d)">
+                    <ion-icon name="checkmark-outline"></ion-icon>{{ mode() === 'kitchen' ? 'Ready' : 'Served' }}
+                  </button>
+                } @else {
+                  <span class="st">{{ itemState(d) === 'ready' ? 'Ready' : itemState(d) === 'served' ? 'Served' : 'Cooking' }}</span>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</ion-content>

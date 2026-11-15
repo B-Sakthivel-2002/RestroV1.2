@@ -1060,7 +1060,7 @@ public class BillController : ControllerBase
     }
 
     [HttpGet("GetBillOrderIdsReport")]
-    public async Task<IActionResult> GetBillOrderIdsReport(DateTime? fromDate, DateTime? toDate, string? status, string? orderType, int? branchId = null)
+    public async Task<IActionResult> GetBillOrderIdsReport(DateTime? fromDate, DateTime? toDate, string? status, string? orderType, int? branchId = null, int? orderTypeId = null)
     {
         var tenant = await _tenant.GetAsync();
 
@@ -1079,7 +1079,12 @@ public class BillController : ControllerBase
         {
             query = query.Where(b => b.Status.ToLower() == status.ToLower());
         }
-        if (!string.IsNullOrWhiteSpace(orderType) && !orderType.Equals("all", StringComparison.OrdinalIgnoreCase))
+        if (orderTypeId.HasValue && orderTypeId.Value > 0)
+        {
+            // Each order screen (Take away / Express Stall / Home Delivery) lists only its own bills.
+            query = query.Where(b => b.Billdetails.Any(d => d.Order.Ordertypeid == orderTypeId.Value));
+        }
+        else if (!string.IsNullOrWhiteSpace(orderType) && !orderType.Equals("all", StringComparison.OrdinalIgnoreCase))
         {
             query = query.Where(b => b.Billdetails.Any(d =>
                 _context.Ordertypes

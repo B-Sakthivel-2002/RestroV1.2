@@ -1,0 +1,272 @@
+<ion-header class="ion-no-border">
+
+  <!-- First Header -->
+  <ion-toolbar color="primary">
+    <ion-title>Orders</ion-title>
+
+    <ion-buttons slot="end">
+          <ion-button
+            expand="block"
+            shape="round"
+            size="small"
+            class="go-btn" (click)="toggleFilter()">
+            <ion-icon  [name]="showFilter  ? 'close-outline':  'filter-outline'" ></ion-icon>
+          </ion-button>
+      
+    </ion-buttons>
+  </ion-toolbar>
+
+  <!-- Second Header -->
+   @if(showFilter){
+  <ion-toolbar color="dark" class="filter-toolbar">
+
+    <ion-grid >
+      <ion-row class="ion-align-items-end ion-padding-horizontal">
+
+        <!-- From Date -->
+        <ion-col size="6" >
+          <ion-label class="small-label">From Date</ion-label>
+
+          <ion-input
+            type="date"
+            fill="outline"
+            [(ngModel)]="inputFromDate"
+            (ngModelChange)="onInputDateValid()"
+            [max]="todayStr">
+          </ion-input>
+        </ion-col>
+
+        <!-- To Date -->
+        <ion-col size="6">
+          <ion-label class="small-label">To Date</ion-label>
+
+          <ion-input
+            type="date"
+            fill="outline"
+            [(ngModel)]="inputToDate"
+            (ngModelChange)="onInputDateValid()"
+            [max]="todayStr">
+          </ion-input>
+        </ion-col>
+
+        
+
+      </ion-row>
+
+      <!-- Second Row -->
+      <ion-row class="ion-align-items-end ion-padding-horizontal ion-padding-bottom">
+
+        <ion-col size="5">
+          <ion-label class="small-label">Order Type</ion-label>
+
+          <ion-select
+        interface="popover"
+        fill="outline"
+        [(ngModel)]="inputType"
+        (ionChange)="onOrderTypeChange($event.detail.value)"
+        placeholder="Type">
+
+        @for(ot of orderTypeList; track ot.ordertypeid){
+          <ion-select-option [value]="ot.ordertypeid">
+            {{ ot.ordertypename }}
+          </ion-select-option>
+        }
+
+      </ion-select>
+        </ion-col>
+
+        <!-- Status -->
+        <ion-col size="5">
+          <ion-label class="small-label">Status</ion-label>
+
+          <ion-select
+            interface="popover"
+            fill="outline"
+            [(ngModel)]="inputStatus"
+            (ionChange)="onStatusChange($event.detail.value)"
+            placeholder="Select Status">
+
+            <ion-select-option value="approved">Closed</ion-select-option>
+            <ion-select-option value="submitted">Submitted</ion-select-option>
+            <ion-select-option value="printed">Printed</ion-select-option>
+            <ion-select-option value="all">All</ion-select-option>
+            <ion-select-option value="cancelled">Cancelled</ion-select-option>
+
+          </ion-select>
+        </ion-col>
+
+        <!-- Button -->
+        <ion-col size="2">
+         
+          <ion-button
+            expand="block"
+            shape="round"
+            size="small"
+            class="go-btn"
+            [disabled]="dateInvalid"
+            (click)="getOrderReport()">
+             <ion-icon name="search"></ion-icon>
+          </ion-button>
+        </ion-col>
+
+      </ion-row>
+    </ion-grid>
+
+    @if(dateInvalid){
+      <ion-text color="danger" class="ion-padding-horizontal">
+        <small>From date should be before To date</small>
+      </ion-text>
+    }
+
+  </ion-toolbar>
+  }
+
+  <ion-toolbar color="light">
+     <div class="inputViewDetail">
+      <b>Filter By:</b>
+        <span>Fr: {{inputFromDate}}</span> <span>To : {{inputToDate}}</span> <span>Type : {{ selectedOrderTypeName }}</span> <span>Status :{{inputStatus}}</span>
+     </div>
+    </ion-toolbar>
+
+</ion-header>
+
+<ion-content color="light" class="orders-page">
+
+  @if(orderList.length > 0){
+
+  
+  <ion-accordion-group>
+
+  @for(bl of orderList; track bl.orderid){
+
+    <ion-accordion [value]="bl.orderid">
+
+      <!-- HEADER -->
+      <ion-item slot="header" lines="none">
+
+        <ion-label>
+
+          <ion-grid class="ion-no-padding">
+
+            <ion-row>
+              <ion-col size="12">
+                <small>
+                  {{ bl.businessdate | date:'dd-MM-yyyy' }}
+                  {{ getTimeAgo(bl.timedate) }}
+                </small>
+              </ion-col>
+            </ion-row>
+
+            <ion-row>
+              <ion-col size="12" class="order-list">
+
+                <ion-badge color="warning">
+                  {{ bl.status }}
+                </ion-badge>
+
+                <ion-badge color="success">
+                  {{ bl.ordertype }}
+                </ion-badge>
+
+                @if(bl.tableid){
+                  <ion-badge color="primary">
+                    T : {{ bl.tableid }}
+                  </ion-badge>
+                }
+
+              </ion-col>
+            </ion-row>
+
+            <ion-row>
+              <ion-col size="4">
+                <small>Order Id</small>
+                <h4>{{ bl.orderid }}</h4>
+              </ion-col>
+
+              <ion-col size="4">
+                <small>Bill Id</small>
+                <h4>{{ bl.billingid }}</h4>
+              </ion-col>
+
+              <ion-col size="4">
+                <small>Total</small>
+                <h4>₹{{ bl.totalprice }}</h4>
+              </ion-col>
+            </ion-row>
+
+          </ion-grid>
+
+        </ion-label>
+
+      </ion-item>
+
+
+      <!-- CONTENT -->
+      <div slot="content" class="ion-padding cs-dark" >
+
+        <h5>Order Items</h5>
+
+        @for(item of bl.orderdetail; track item.orderdetailid){
+
+          <ion-item lines="full">
+
+            <ion-label>
+              <h3>{{ item.name }} </h3>          
+            </ion-label>
+            <ion-badge>
+               Qty : {{ item.qty }}
+            </ion-badge>
+            <ion-note slot="end">
+             ₹{{ item.sumofprice }}
+            </ion-note>
+
+          </ion-item>
+
+        }
+
+        <ion-item lines="none">
+          <ion-label><b>Total</b></ion-label>
+          <ion-note slot="end">
+            ₹{{ bl.totalprice }}
+          </ion-note>
+        </ion-item>
+
+        @if(bl.status == 'submitted'){
+
+            <!-- <div class="btn-row">
+
+              <ion-button
+                size="small"
+                color="danger"
+                fill="outline"
+                (click)="openModal(bl,'cancel')">
+                Cancel
+              </ion-button>
+
+              <ion-button
+                size="small"
+                color="primary"
+                (click)="openModal(bl,'edit')">
+                Edit
+              </ion-button>
+
+            </div> -->
+
+        }
+
+      </div>
+
+    </ion-accordion>
+
+  }
+
+</ion-accordion-group>
+}@else{
+  <div class="no-orders">
+    <ion-icon name="document-text-outline" size="large"></ion-icon>
+    <p>No orders found for the selected criteria.</p>
+  </div>
+}
+
+
+</ion-content>

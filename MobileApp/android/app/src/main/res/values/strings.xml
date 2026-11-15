@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Restro Mobile</string>
+    <string name="title_activity_main">Restro Mobile</string>
+    <string name="package_name">com.ameer.restaurantmobile</string>
+    <string name="custom_url_scheme">com.ameer.restaurantmobile</string>
+</resources>

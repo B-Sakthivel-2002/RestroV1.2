@@ -1,0 +1,88 @@
+// App theme. Primary matches the web app (#4361ee). System font only (no web fonts:
+// the app often runs on a restaurant LAN without internet, and it loads faster).
+:root {
+  --ion-font-family: Roboto, 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  --ion-color-primary: #4361ee;
+  --ion-color-primary-rgb: 67, 97, 238;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #3b55d1;
+  --ion-color-primary-tint: #5671f0;
+
+  --ion-color-secondary: #7c3aed;
+  --ion-color-secondary-rgb: 124, 58, 237;
+  --ion-color-secondary-contrast: #ffffff;
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #6d33d0;
+  --ion-color-secondary-tint: #894eef;
+
+  --ion-color-success: #16a34a;
+  --ion-color-success-rgb: 22, 163, 74;
+  --ion-color-success-contrast: #ffffff;
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #138f41;
+  --ion-color-success-tint: #2dac5c;
+
+  --ion-color-warning: #d97706;
+  --ion-color-warning-rgb: 217, 119, 6;
+  --ion-color-warning-contrast: #ffffff;
+  --ion-color-warning-contrast-rgb: 255, 255, 255;
+  --ion-color-warning-shade: #bf6905;
+  --ion-color-warning-tint: #dd851f;
+
+  --ion-color-danger: #dc2626;
+  --ion-color-danger-rgb: 220, 38, 38;
+  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #c22121;
+  --ion-color-danger-tint: #e03c3c;
+
+  // App surfaces / text
+  --app-bg: #f4f6fb;
+  --app-surface: #ffffff;
+  --app-surface-alt: #f8f9fc;
+  --app-border: #e4e8f0;
+  --app-text: #111827;
+  --app-muted: #6b7280;
+  --app-primary-soft: #eef1fd;
+  --app-success-soft: #e8f7ee;
+  --app-warning-soft: #fdf3e2;
+  --app-danger-soft: #fdecec;
+  --app-info-soft: #e6f0fe;
+  --app-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+  --app-shadow-lg: 0 8px 24px rgba(16, 24, 40, .12);
+  --app-radius: 14px;
+
+  --ion-background-color: var(--app-bg);
+  --ion-text-color: var(--app-text);
+  --ion-toolbar-background: var(--app-surface);
+  --ion-tab-bar-background: var(--app-surface);
+  --ion-item-background: var(--app-surface);
+  --ion-card-background: var(--app-surface);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app-bg: #0f1218;
+    --app-surface: #1a1f2a;
+    --app-surface-alt: #222836;
+    --app-border: #2c3342;
+    --app-text: #e7eaf0;
+    --app-muted: #98a1b3;
+    --app-primary-soft: #232b4d;
+    --app-success-soft: #173325;
+    --app-warning-soft: #3a2c14;
+    --app-danger-soft: #3d1c1c;
+    --app-info-soft: #1d2a40;
+    --app-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    --app-shadow-lg: 0 8px 24px rgba(0, 0, 0, .5);
+
+    --ion-background-color: var(--app-bg);
+    --ion-text-color: var(--app-text);
+    --ion-toolbar-background: var(--app-surface);
+    --ion-tab-bar-background: var(--app-surface);
+    --ion-item-background: var(--app-surface);
+    --ion-card-background: var(--app-surface);
+  }
+}

@@ -1,0 +1,44 @@
+<ion-content [fullscreen]="true">
+  <div class="top">
+    <div class="logo"><ion-icon name="restaurant"></ion-icon></div>
+    <h1>Welcome back</h1>
+    <p>Sign in with your restaurant account</p>
+  </div>
+
+  <form class="sheet" (ngSubmit)="login()" autocomplete="off">
+    @if (notice()) { <div class="msg warn">{{ notice() }}</div> }
+
+    <label class="field">
+      <span>Username</span>
+      <div class="input-icon">
+        <ion-icon name="person-outline"></ion-icon>
+        <input name="username" [(ngModel)]="username" autocapitalize="off" autocomplete="username" [disabled]="busy()" />
+      </div>
+      @if (submitted && !username.trim()) { <small class="err">Enter your username</small> }
+    </label>
+
+    <label class="field">
+      <span>Password</span>
+      <div class="input-icon">
+        <ion-icon name="lock-closed-outline"></ion-icon>
+        <input name="password" [(ngModel)]="password" [type]="showPassword ? 'text' : 'password'" autocomplete="current-password" [disabled]="busy()" />
+        <button type="button" class="eye" (click)="showPassword = !showPassword" [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'">
+          <ion-icon [name]="showPassword ? 'eye-off-outline' : 'eye-outline'"></ion-icon>
+        </button>
+      </div>
+      @if (submitted && !password) { <small class="err">Enter your password</small> }
+    </label>
+
+    @if (error()) { <div class="msg err">{{ error() }}</div> }
+
+    <button class="btn primary block go" type="submit" [disabled]="busy()">
+      @if (busy()) { <ion-spinner name="crescent"></ion-spinner> Signing in… } @else { Sign in }
+    </button>
+
+    <button type="button" class="server" (click)="changeServer()">
+      <ion-icon name="server-outline"></ion-icon>
+      <span>Server <b>{{ api.serverLabel() }}</b></span>
+      <ion-icon name="swap-horizontal-outline"></ion-icon>
+    </button>
+  </form>
+</ion-content>

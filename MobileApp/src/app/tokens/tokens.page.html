@@ -1,0 +1,159 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>
+      Tokens
+      <span class="sub-title">Waitlist · {{ auth.session()?.branchName }}</span>
+    </ion-title>
+    <ion-buttons slot="end">
+      <span class="live"><i class="live-dot" [class.off]="liveStatus() !== 'connected'"></i>{{ liveStatus() === 'connected' ? 'Live' : 'Connecting' }}</span>
+    </ion-buttons>
+  </ion-toolbar>
+  <ion-toolbar class="seg-bar">
+    <div class="seg">
+      <button [class.active]="tab() === 'queue'" (click)="tab.set('queue')">Queue <span>{{ active().length }}</span></button>
+      <button [class.active]="tab() === 'history'" (click)="tab.set('history')">Today <span>{{ closed().length }}</span></button>
+    </div>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="refresh($event)"><ion-refresher-content></ion-refresher-content></ion-refresher>
+
+  <div class="stats">
+    <div><b class="w">{{ summary()?.waiting ?? 0 }}</b><span>Waiting</span></div>
+    <div><b class="c">{{ summary()?.called ?? 0 }}</b><span>Called</span></div>
+    <div><b class="s">{{ summary()?.seatedToday ?? 0 }}</b><span>Seated</span></div>
+    <div><b class="f">{{ freeTables().length }}</b><span>Free tables</span></div>
+  </div>
+
+  @if (loading()) {
+    <div class="list">@for (i of [1,2,3]; track i) { <div class="skeleton sk"></div> }</div>
+  } @else if (tab() === 'queue') {
+    @if (!active().length) {
+      <div class="empty">
+        <ion-icon name="ticket-outline"></ion-icon>
+        <h3>No one is waiting</h3>
+        <p>Tap + to give a walk-in guest a token.</p>
+      </div>
+    }
+    <div class="list">
+      @for (t of active(); track t.tokenid) {
+        <div class="tk card" [class.called]="t.status === 'Called'" [class.busy]="busyId() === t.tokenid">
+          <div class="tk-top">
+            <div class="code">{{ t.tokencode }}</div>
+            <div class="who">
+              <div class="name">{{ t.customername }}</div>
+              <div class="meta">
+                <ion-icon name="people-outline"></ion-icon>{{ t.guests }}
+                <ion-icon name="time-outline"></ion-icon>{{ waitedMin(t) }} min
+                @if (t.status === 'Waiting' && t.estimatedMinutes) { <span>· est. {{ t.estimatedMinutes }} min</span> }
+              </div>
+            </div>
+            <div class="badges">
+              @if (t.status === 'Called') { <span class="badge b-primary">Called</span> }
+              @else { <span class="badge b-warning">#{{ t.position }}</span> }
+              @if (holdOverdue(t)) { <span class="badge b-danger">Not arrived</span> }
+            </div>
+          </div>
+
+          @if (t.status === 'Called') {
+            <div class="table-line">
+              <ion-icon name="grid-outline"></ion-icon>
+              <b>{{ tablesOf(t) }}</b>
+              <span class="muted">· {{ t.assignmode === 'Auto' ? 'by system' : 'by captain' }}</span>
+            </div>
+          }
+          @if (t.notes) { <div class="notes">“{{ t.notes }}”</div> }
+
+          <div class="actions">
+            @if (t.mobile) {
+              <a class="icon-btn" [href]="'tel:' + t.mobile" aria-label="Call customer"><ion-icon name="call-outline"></ion-icon></a>
+            }
+            @if (t.status === 'Waiting') {
+              <button class="btn sm soft" (click)="call(t)" [disabled]="busyId() === t.tokenid || !freeTables().length">
+                <ion-icon name="megaphone-outline"></ion-icon> Call
+              </button>
+            }
+            <button class="btn sm outline" (click)="openPicker(t)" [disabled]="busyId() === t.tokenid">
+              <ion-icon name="swap-horizontal-outline"></ion-icon> {{ t.status === 'Called' ? 'Change' : 'Table' }}
+            </button>
+            @if (t.status === 'Called') {
+              <button class="btn sm success" (click)="seat(t)" [disabled]="busyId() === t.tokenid">
+                <ion-icon name="checkmark-done-outline"></ion-icon> Seat
+              </button>
+            }
+            <button class="icon-btn danger" (click)="close(t)" [disabled]="busyId() === t.tokenid"
+                    [attr.aria-label]="t.status === 'Called' ? 'No-show' : 'Cancel'">
+              <ion-icon name="close-circle-outline"></ion-icon>
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  } @else {
+    @if (!closed().length) {
+      <div class="empty"><ion-icon name="ticket-outline"></ion-icon><h3>No finished tokens today</h3></div>
+    }
+    <div class="list">
+      @for (t of closed(); track t.tokenid) {
+        <div class="tk card done">
+          <div class="tk-top">
+            <div class="code sm">{{ t.tokencode }}</div>
+            <div class="who">
+              <div class="name">{{ t.customername }}</div>
+              <div class="meta">
+                <ion-icon name="people-outline"></ion-icon>{{ t.guests }}
+                @if (t.tablename) { <span>· {{ tablesOf(t) }}</span> }
+                <span>· waited {{ t.waitingMinutes }} min</span>
+              </div>
+            </div>
+            <span class="badge" [class.b-success]="t.status === 'Seated'" [class.b-danger]="t.status !== 'Seated'">
+              {{ t.status === 'NoShow' ? 'No-show' : t.status }}
+            </span>
+          </div>
+          <div class="when muted">{{ t.createdat | date:'h:mm a' }}</div>
+        </div>
+      }
+    </div>
+  }
+
+  <ion-fab slot="fixed" vertical="bottom" horizontal="end">
+    <ion-fab-button (click)="newToken()" aria-label="New token"><ion-icon name="add"></ion-icon></ion-fab-button>
+  </ion-fab>
+
+  <!-- table picker -->
+  <ion-modal [isOpen]="!!pickToken()" (didDismiss)="closePicker()" [initialBreakpoint]="0.75" [breakpoints]="[0, 0.75, 1]" class="picker-modal">
+    <ng-template>
+      <div class="picker">
+        <div class="row-between">
+          <div>
+            <h3>{{ pickToken()?.tokencode }} · {{ pickToken()?.customername }}</h3>
+            <p class="muted">{{ pickToken()?.guests }} guests · pick one table, or several on one floor</p>
+          </div>
+          <button class="icon-btn" (click)="closePicker()" aria-label="Close"><ion-icon name="close-outline"></ion-icon></button>
+        </div>
+        <div class="pick-grid">
+          @for (tb of freeTables(); track tb.tableid) {
+            <button class="pick" [class.active]="picked().includes(tb.tableid)" [disabled]="!canPick(tb)" (click)="togglePick(tb)">
+              <b>{{ tb.tablename }}</b>
+              <span><ion-icon name="people-outline"></ion-icon>{{ tb.capacity }}</span>
+              @if (floors().length > 1) { <small>{{ floorName(tb.floorid) }}</small> }
+            </button>
+          } @empty {
+            <p class="muted">No free table right now.</p>
+          }
+        </div>
+        @if (picked().length) {
+          <div class="pick-sum" [class.short]="pickedSeats() < pickToken()?.guests">
+            {{ pickedNames() }} · {{ pickedSeats() }} seats
+            @if (pickedSeats() < pickToken()?.guests) { — needs {{ pickToken()?.guests }}, add a table on this floor }
+          </div>
+        }
+        <div class="pick-actions">
+          <button class="btn outline" (click)="assignPicked(false)" [disabled]="!picked().length || pickedSeats() < pickToken()?.guests">Hold &amp; call</button>
+          <button class="btn primary" (click)="assignPicked(true)" [disabled]="!picked().length || pickedSeats() < pickToken()?.guests">Seat now</button>
+        </div>
+      </div>
+    </ng-template>
+  </ion-modal>
+</ion-content>

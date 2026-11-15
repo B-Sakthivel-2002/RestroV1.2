@@ -235,6 +235,11 @@ export const routes: Routes = [
       data:{dataRoles:['Admin','SuperAdmin']},
       canActivate: [RoleGuard]
    },{
+      path:'settings/sync',
+      loadComponent:()=>import('./pages/sync-status.component').then(m=>m.SyncStatusComponent),
+      data:{dataRoles:['Admin','SuperAdmin']},
+      canActivate: [RoleGuard]
+   },{
       path:'settings/mobile-connect',
       loadComponent:()=>import('./pages/mobile-connect.component').then(m=>m.MobileConnectComponent),
       data:{dataRoles:['Admin','SuperAdmin']},

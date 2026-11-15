@@ -1,0 +1,21 @@
+<ion-header>
+      <ion-toolbar>
+        <ion-title>Discount</ion-title>
+        <ion-buttons slot="end">
+          <ion-button (click)="close()">Close</ion-button>
+        </ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+
+    <ion-content>
+      <ion-item>
+        <ion-label>Select Discount</ion-label>
+        <ion-select [(ngModel)]="selected">
+          <ion-select-option *ngFor="let d of discountList" [value]="d">
+            {{ d.discountname }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <ion-button expand="block" (click)="apply()">Apply</ion-button>
+    </ion-content>

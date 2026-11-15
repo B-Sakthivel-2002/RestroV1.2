@@ -39,9 +39,9 @@ public static class PasswordSecurity
     {
         try
         {
-            var users = await context.Users.Where(u => !u.Password.StartsWith(Prefix)).ToListAsync();
+            var users = await context.Users.Where(u => u.Password != null && !u.Password.StartsWith(Prefix)).ToListAsync();
             foreach (var user in users)
-                user.Password = Hash(user.Password);
+                user.Password = Hash(user.Password!);
             if (users.Count > 0)
             {
                 await context.SaveChangesAsync();
