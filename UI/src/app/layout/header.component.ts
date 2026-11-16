@@ -85,7 +85,7 @@ import { OrderAlertsComponent } from '../shared/component/order-alerts.component
       </nav>
     </header>
     } @else {
-    <!-- ===== Side layouts: full sidebar (Orchid, Midnight) or icon rail (Sunrise) ===== -->
+    <!-- ===== Side layouts: full sidebar (Orchid, Midnight) or icon rail (user choice) ===== -->
     <aside class="rp-side" [class.open]="drawerOpen" aria-label="Main menu">
       <div class="rp-side-brand">
         <a routerLink="/dashboard" class="rp-side-logo" [title]="branchName || appName">

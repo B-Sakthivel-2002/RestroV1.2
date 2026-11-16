@@ -9,8 +9,6 @@
 /* mini preview */
 .ts-prev { position: relative; height: 150px; display: flex; gap: 6px; padding: 8px; background: var(--p-bg); overflow: hidden; }
 .ts-prev.nav-top { flex-direction: column; }
-.ts-prev.glass { background: radial-gradient(60% 60% at 15% 10%, rgba(255,166,92,.7), transparent 70%),
-  radial-gradient(50% 50% at 90% 90%, rgba(242,107,29,.35), transparent 70%), var(--p-bg); }
 .ts-top { display: flex; align-items: center; gap: 6px; height: 18px; padding: 0 6px; border-radius: 5px; background: var(--p-nav); flex: none; }
 .ts-top i { width: 10px; height: 10px; border-radius: 3px; background: var(--p-primary); margin-right: auto; }
 .ts-top span { width: 18px; height: 5px; border-radius: 3px; background: var(--p-navtext); opacity: .45; }
@@ -28,7 +26,6 @@
 .ts-kpi { border-radius: 6px; background: var(--p-surface); }
 .ts-panels { flex: 1; display: grid; grid-template-columns: 1.6fr 1fr; gap: 5px; }
 .ts-panels div { border-radius: 6px; background: var(--p-surface); }
-.glass .ts-kpi, .glass .ts-panels div, .glass .ts-side, .glass .ts-bar { border: 1px solid rgba(255,255,255,.8); backdrop-filter: blur(6px); }
 
 .ts-meta { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 4px; }
 .ts-name { display: flex; align-items: center; justify-content: space-between; font-family: var(--rp-font-heading); font-weight: 700; font-size: 16px; }

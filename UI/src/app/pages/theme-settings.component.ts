@@ -24,7 +24,7 @@ import { Density, NavLayout, ThemeDef, ThemeService } from '@appservices/theme.s
               <button type="button" class="ts-card" role="radio" [attr.aria-checked]="theme.prefs().theme === t.id"
                       [class.selected]="theme.prefs().theme === t.id" (click)="theme.setTheme(t.id)">
                 <!-- mini preview drawn in the theme's own colours and layout -->
-                <div class="ts-prev" [ngClass]="'nav-' + t.nav" [class.glass]="t.id === 'sunrise'" [ngStyle]="vars(t)">
+                <div class="ts-prev" [ngClass]="'nav-' + t.nav" [ngStyle]="vars(t)">
                   @if (t.nav === 'top') {
                     <div class="ts-top"><i></i><span></span><span></span><span class="on"></span><span></span></div>
                   } @else {
@@ -53,7 +53,6 @@ import { Density, NavLayout, ThemeDef, ThemeService } from '@appservices/theme.s
                     <span>{{navLabel(t.nav)}}</span>
                     <span>{{t.font}}</span>
                     @if (t.dark) { <span>Dark</span> }
-                    @if (t.id === 'sunrise') { <span>Glass</span> }
                     @if (t.density === 'compact') { <span>Compact</span> }
                   </div>
                 </div>
@@ -134,7 +133,6 @@ export class ThemeSettingsComponent {
     const sets: Record<string, string[]> = {
       classic: [`linear-gradient(135deg, ${t.preview.primary}, ${t.preview.accent})`],
       orchid: ['linear-gradient(160deg,#2e0a6b,#8b5cf6)', 'linear-gradient(150deg,#9d4edd,#c77dff)', 'linear-gradient(150deg,#8b5cf6,#b794f6)', 'linear-gradient(150deg,#b06ef3,#d8b4fe)'],
-      sunrise: ['linear-gradient(145deg,#ff8f45,#e2550c)', '#2b2118'],
       midnight: ['#22208a', '#f0146d', '#8b2be2', '#ffad2a'],
       carbon: ['linear-gradient(135deg,#0f766e,#155e75)']
     };

@@ -2,7 +2,7 @@
    Colours, fonts, radii, shadows and type sizes come from the tokens in :root, so each theme
    (src/styles/_themes.scss) only has to redefine tokens and a few signature components.
    The sidebar / icon-rail navigation lives in src/styles/_shell.scss. */
-@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 @import "primeicons/primeicons.css";
 
 /* =====================================================================
@@ -1813,3 +1813,5 @@ h1, h2, h3, h4, h5, h6{ color: inherit; font-family: var(--rp-font-heading); }
 @import "styles/shell";
 @import "styles/themes";
 @import "styles/theme-page";
+@import "styles/dashboard";
+@import "styles/pos";

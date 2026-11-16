@@ -4,7 +4,6 @@
    tokens (palette, font, shape, surfaces, navigation colours) plus a few signature
    component treatments. Classic is the base in styles.scss, so it needs no block here.
      orchid    soft purple, gradient KPI cards, floating rounded panels, side menu
-     sunrise   warm frosted glass over a glowing background, icon rail
      midnight  navy sidebar, multi-colour KPI cards with sparklines
      carbon    dark, compact, high contrast (Bootstrap dark mode on)
    ===================================================================== */
@@ -83,6 +82,27 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
 :root[data-theme="orchid"]{
   .rp-nav-item.active::before, .rp-nav-item.current::before{ left: -30px; width: 6px; top: 6px; bottom: 6px; }
 
+  // top bar chosen instead of the sidebar: same floating rounded panel and pill highlight
+  &[data-nav="top"]{
+    --rp-header-h: 98px; // 16px gap + bar + 16px gap: the POS bill panel starts below it
+    .custom-navbar-bg{
+      top: 16px;
+      margin: 16px 16px 0;
+      background: #f8f7fb;
+      border: 0;
+      border-radius: 24px;
+      box-shadow: 0 -16px 0 16px var(--rp-bg); // hides content scrolling above the floating bar
+    }
+    .custom-navbar-bg .navbar{ padding: 10px 18px; }
+    .custom-navbar-bg .navbar .navbar-nav .nav-link{ color: #5b5470; border-radius: 999px; padding: 8px 14px; }
+    .custom-navbar-bg .navbar .navbar-nav .nav-link .icon{ color: #8b5cf6; }
+    .custom-navbar-bg .navbar .navbar-nav .nav-link:hover,
+    .custom-navbar-bg .navbar .navbar-nav .nav-link.show{ background: #efeaf8; color: #251b3d; }
+    .custom-navbar-bg .navbar .navbar-nav .nav-link.active,
+    .custom-navbar-bg .navbar .navbar-nav .nav-item.current > .nav-link{ background: linear-gradient(90deg, #e7dafd, #f4eeff); color: #2e1065; font-weight: 600; }
+    @media (max-width: 1439.98px){ .custom-navbar-bg .navbar .navbar-nav .nav-link{ padding: 8px 10px; } }
+  }
+
   // big gradient page titles
   .sub-header{ background: transparent; border-bottom: 0; padding-top: 20px; }
   .sub-header .btn-bg{ background: transparent; }
@@ -127,140 +147,10 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
     justify-content: center;
   }
 
-  // dashboard tiles: lavender cards
-  .wrk-prd-bg .btn-trans{ background: #efe4fd; border-color: transparent; }
-  .wrk-prd-bg .btn-trans i{ background: #fff; color: #7c3aed; }
-  .wrk-prd-bg .btn-trans .pi-user{ color: #c026d3; background: #fff; }
-  .wrk-prd-bg .btn-trans .pi-chart-bar{ color: #6d28d9; background: #fff; }
-  .wrk-prd-bg .btn-trans:hover{ background: var(--rp-hero); color: #fff; border-color: transparent; }
-
   .dinein-list .list{ border-color: transparent; box-shadow: var(--rp-shadow-md); }
   .kot-card, .cs-tab .tab-content{ border-color: transparent; box-shadow: var(--rp-shadow-md); }
   .order-content .lft .mn-list.active{ background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
   .hero-login{ border: 0; }
-}
-
-/* =====================================================================
-   SUNRISE (glass)
-   ===================================================================== */
-:root[data-theme="sunrise"]{
-  --rp-primary: #ea5f12;
-  --rp-primary-rgb: 234, 95, 18;
-  --rp-primary-hover: #d9520a;
-  --rp-primary-active: #bf4706;
-  --rp-primary-soft: #fde5d3;
-  --rp-primary-ring: rgba(234, 95, 18, 0.2);
-  --rp-primary-deep: #b93d05;
-  --rp-primary-shadow: 0 8px 18px rgba(234, 95, 18, 0.3);
-  --rp-hero: linear-gradient(145deg, #ff8f45 0%, #f26b1d 55%, #e2550c 100%);
-  --rp-hero-shadow: 0 14px 30px rgba(226, 85, 12, 0.28);
-
-  --rp-warning: #d18a00;
-  --rp-warning-soft: #fdeec8;
-  --rp-highlight: #fff1cf;
-
-  --rp-bg: #efdfc8;
-  --rp-bg-image:
-    radial-gradient(55% 45% at 12% 8%, rgba(255, 166, 92, .55), transparent 70%),
-    radial-gradient(45% 40% at 88% 14%, rgba(255, 221, 170, .75), transparent 70%),
-    radial-gradient(55% 55% at 72% 95%, rgba(242, 107, 29, .25), transparent 70%),
-    linear-gradient(160deg, #f8ecdb, #eedac0);
-  --rp-surface: rgba(255, 251, 245, 0.66);
-  --rp-surface-solid: #fffaf3;
-  --rp-surface-alt: rgba(255, 255, 255, 0.55);
-  --rp-surface-blur: blur(18px) saturate(140%);
-  --rp-border: rgba(255, 255, 255, 0.75);
-  --rp-border-strong: rgba(120, 88, 56, 0.2);
-  --rp-row-hover: rgba(255, 255, 255, 0.6);
-  --rp-neutral-soft: rgba(255, 255, 255, 0.7);
-  --rp-neutral-line: rgba(120, 88, 56, 0.14);
-  --rp-neutral-strong: rgba(120, 88, 56, 0.24);
-
-  --rp-text: #2b2118;
-  --rp-text-muted: #7a6553;
-  --rp-text-subtle: #a8957f;
-  --rp-dark: #241b14;
-
-  --rp-font: "DM Sans", system-ui, sans-serif;
-  --rp-heading-weight: 700;
-  --rp-heading-tracking: -0.025em;
-
-  --rp-radius-sm: 10px;
-  --rp-radius: 16px;
-  --rp-radius-lg: 22px;
-  --rp-control-radius: 14px;
-  --rp-btn-radius: 999px;
-
-  --rp-shadow-sm: 0 1px 2px rgba(90, 56, 20, 0.05);
-  --rp-shadow-md: 0 10px 28px rgba(90, 56, 20, 0.1);
-  --rp-shadow-lg: 0 24px 50px rgba(90, 56, 20, 0.18);
-
-  // floating glass rail with white squircle icons; the current page's icon is filled orange
-  --rp-side-inset: 16px;
-  --rp-nav-bg: rgba(255, 251, 245, 0.5);
-  --rp-nav-text: #5c4a3a;
-  --rp-nav-strong: #2b2118;
-  --rp-nav-muted: #a8957f;
-  --rp-nav-hover: rgba(255, 255, 255, 0.55);
-  --rp-nav-active-bg: transparent;
-  --rp-nav-active-text: #2b2118;
-  --rp-nav-border: rgba(255, 255, 255, 0.7);
-  --rp-nav-shadow: 0 10px 30px rgba(90, 56, 20, 0.1);
-  --rp-nav-radius: 26px;
-  --rp-nav-item-radius: 14px;
-  --rp-nav-chip-bg: rgba(255, 255, 255, 0.85);
-  --rp-topbar-bg: rgba(255, 251, 245, 0.45);
-  --rp-topbar-border: rgba(255, 255, 255, 0.6);
-  --rp-topbar-shadow: none;
-}
-
-:root[data-theme="sunrise"]{
-  .rp-side{ border: 1px solid var(--rp-nav-border); }
-  .rp-nav-item.active > i:first-child, .rp-nav-item.current > i:first-child{
-    background: var(--rp-hero);
-    color: #fff;
-    box-shadow: var(--rp-primary-shadow);
-  }
-  .rp-nav-item:hover{ background: transparent; }
-  .rp-nav-item:hover > i:first-child{ background: #fff; }
-
-  // bold editorial page titles
-  .sub-header{ background: transparent; border-bottom: 0; padding-top: 18px; }
-  .sub-header .btn-bg{ background: transparent; }
-  .sub-header .tt .mn-tt, .sub-header .tt .cs-mn-tt, .main-title .sub-title{ font-size: 30px; font-weight: 700; letter-spacing: -0.035em; }
-
-  // frosted panels (only the big containers blur, to stay light on POS hardware)
-  .order-content .rgt, .cs-tab .tab-content, .sh-grd-bg, .hero-login, .modal-content,
-  .custom-table, .kot-card{
-    -webkit-backdrop-filter: var(--rp-surface-blur);
-    backdrop-filter: var(--rp-surface-blur);
-  }
-  .custom-table, .cs-tab .tab-content, .kot-card, .dinein-list .list, .order-content .lft .mn-list,
-  .sh-grd-bg, .wrk-prd-bg .btn-trans{ border-color: rgba(255, 255, 255, .8); box-shadow: var(--rp-shadow-md); }
-  .custom-table th{ background: rgba(255, 255, 255, .45); }
-  .fl-bg, .btn-bg{ background: transparent; } // translucent layers would stack into lighter strips
-  .modal-content{ background: rgba(255, 250, 243, .92); }
-  .modal-header, .modal-footer{ background: transparent; }
-
-  .btn-secondary, .btn-outline-secondary{ --bs-btn-bg: rgba(255, 255, 255, .75); --bs-btn-border-color: rgba(255, 255, 255, .9); }
-  .btn-dark, .kot-card .sb-tt .sb-badge{ border-radius: 999px; }
-
-  // KPI cards: orange hero, then charcoal, then glass
-  .ds-grd-box .grd-cnt{ border-color: rgba(255, 255, 255, .8); -webkit-backdrop-filter: var(--rp-surface-blur); backdrop-filter: var(--rp-surface-blur); }
-  .ds-grd-box .grd-cnt:nth-child(2){
-    background: #2b2118;
-    color: #fff8ef;
-    border-color: transparent;
-    > span, .sm-cnt .sb-tt{ color: rgba(255, 248, 239, .7); }
-    .sm-cnt{ border-top-color: rgba(255, 255, 255, .15); }
-  }
-
-  .wrk-prd-bg .btn-trans i{ background: #fff; }
-  .wrk-prd-bg .btn-trans:hover i{ background: var(--rp-hero); color: #fff; }
-  .order-content .lft .mn-list.active, .nav-pills .nav-link.active{ background: var(--rp-hero); }
-  .order-content .cnt, .order-content .rgt{ border-left-color: rgba(255, 255, 255, .7); }
-
-  .hero-login-bg::before{ background: transparent; }
 }
 
 /* =====================================================================
@@ -359,15 +249,6 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
     background-color: #ffad2a; background-image: url($rp-spark); color: #3b2300; box-shadow: 0 10px 22px rgba(255, 173, 42, .3);
     > span, .sm-cnt .sb-tt{ color: rgba(59, 35, 0, .75); }
     .sm-cnt{ border-top-color: rgba(59, 35, 0, .15); }
-  }
-
-  // dashboard tiles: icon colour cycles through the same four colours
-  .wrk-prd-bg .btn-trans{
-    &:nth-child(4n+1) i{ background: #e7e6fb; color: #22208a; }
-    &:nth-child(4n+2) i{ background: #fde3ee; color: #f0146d; }
-    &:nth-child(4n+3) i{ background: #f3e8fd; color: #8b2be2; }
-    &:nth-child(4n+4) i{ background: #fff1d6; color: #c77700; }
-    &:hover i{ background: var(--rp-primary); color: #fff; }
   }
 
   .custom-table th{ background: #f7f7fc; color: #6e6d8b; }
@@ -478,5 +359,5 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
   .wrk-prd-bg .btn-trans{ min-height: 92px; padding: 14px; }
   .ds-grd-box .grd-cnt{ padding: 14px 16px; }
   .cs-tab .tab-content{ padding: 20px; }
-  .rp-nav-item{ min-height: 40px; padding: 8px 12px; }
+  .rp-nav-item{ min-height: 40px; padding-top: 8px; padding-bottom: 8px; } // vertical only: the rail keeps its narrow side padding
 }

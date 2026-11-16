@@ -98,11 +98,11 @@ export interface IShortBillForReport {
                   <!-- {{subMenuList | json}}  -->
                   @for (sb of subMenuList; track sb.itemid) {
                     <div class="ls-vw" (click)="addOrderList(sb)">
+                      <span class="ls-vw-ic" [style.--tone]="itemTone(sb.name)" aria-hidden="true">{{ itemCode(sb) }}</span>
                       <h4>{{ sb.name }}</h4>
-                      <span
-                        ><i class="icon pi pi-indian-rupee"></i>
-                        {{ sb.price }}
-                        <i class="spl-icon pi pi-shopping-cart"></i
+                      <span class="ls-vw-ft"
+                        ><span class="ls-vw-price"><i class="icon pi pi-indian-rupee"></i>{{ sb.price }}</span>
+                        <i class="spl-icon pi pi-plus" aria-label="Add"></i
                       ></span>
                     </div>
                   } @empty {
@@ -505,7 +505,7 @@ export interface IShortBillForReport {
                     <!-- (click)="setNewBill()" -->
 
                     <button
-                      class="btn btn-primary"
+                      class="btn btn-primary pos-pay"
                       (click)="typeId != 1 ? settleInline() : openModal(settleTemplate, 'settle')"
                       [disabled]="!this.isSettle || !!editDraft"
                     >
@@ -902,6 +902,20 @@ export class OrderComponent implements OnInit {
   postBill: any = { ...this.defaultPostBill };
 
   destroy$ = new Subject<void>();
+
+  // Item card tile: the item Code from the menu master; initials only when an item has no code.
+  itemCode(item: any): string {
+    return (item?.code || '').toString().trim().toUpperCase() || this.itemInitials(item?.name);
+  }
+  itemInitials(name: string): string {
+    const w = (name || '').trim().split(/\s+/).filter(Boolean);
+    return ((w[0]?.[0] || '') + (w[1]?.[0] || '')).toUpperCase() || '?';
+  }
+  itemTone(name: string): string {
+    let h = 0;
+    for (const c of name || '') h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return this.colorList[h % this.colorList.length];
+  }
 
   colorList: string[] = [
     '#0f766e',

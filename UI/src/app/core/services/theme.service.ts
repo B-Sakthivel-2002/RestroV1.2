@@ -45,12 +45,6 @@ export const THEMES: ThemeDef[] = [
     metaColor: '#7c3aed'
   },
   {
-    id: 'sunrise', name: 'Sunrise', tagline: 'Warm frosted glass, icon rail', dark: false,
-    nav: 'rail', density: 'comfortable', font: 'DM Sans',
-    preview: { bg: '#f3e3cc', surface: 'rgba(255,250,243,.72)', nav: 'rgba(255,250,243,.72)', navText: '#5c4a3a', primary: '#f26b1d', accent: '#fbbf24', text: '#2b2118' },
-    metaColor: '#f26b1d'
-  },
-  {
     id: 'midnight', name: 'Midnight', tagline: 'Navy sidebar, colourful KPI cards', dark: false,
     nav: 'side', density: 'comfortable', font: 'Poppins',
     preview: { bg: '#f4f5fb', surface: '#ffffff', nav: '#1e1b6e', navText: '#c7c6f0', primary: '#8b2be2', accent: '#ff1f7a', text: '#1b1a3a' },

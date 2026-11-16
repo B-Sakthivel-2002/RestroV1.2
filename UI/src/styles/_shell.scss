@@ -28,7 +28,7 @@
   --rp-nav-shadow: none;
   --rp-nav-radius: 0px;
   --rp-nav-item-radius: var(--rp-radius);
-  --rp-nav-chip-bg: transparent;   // rail icon background (Sunrise: white squircles)
+  --rp-nav-chip-bg: transparent;   // rail icon background (a theme can give rail icons a chip)
 
   --rp-topbar-bg: var(--rp-surface);
   --rp-topbar-border: var(--rp-border);
@@ -148,6 +148,7 @@
 }
 .rp-nav-item{
   position: relative;
+  flex-shrink: 0; // never squash items (and clip labels) when the menu is taller than the screen; the menu scrolls instead
   display: flex;
   align-items: center;
   gap: 12px;
@@ -195,7 +196,7 @@
 .rp-nav-item.open .rp-caret{ transform: rotate(180deg); }
 
 // accordion submenu
-.rp-sub{ display: flex; flex-direction: column; gap: 1px; padding: 2px 0 8px 46px; }
+.rp-sub{ flex-shrink: 0; display: flex; flex-direction: column; gap: 1px; padding: 2px 0 8px 46px; }
 .rp-sub-item{
   display: block;
   width: 100%;

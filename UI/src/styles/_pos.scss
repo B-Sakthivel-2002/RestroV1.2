@@ -1,0 +1,210 @@
+/* =====================================================================
+   POS / ORDER SCREEN refresh (order.component)
+   - wide screens: Dine-in keeps categories on the left; Take away / Delivery / Express Stall get category pills on top
+   - item cards: colour initial tile (no item photos yet), name, price, round add button
+   - bill panel: round qty buttons, big total, large green Settle (.pos-pay)
+   Screen only: the bill print copies the HTML into its own window with its own styles.
+   ===================================================================== */
+
+/* ---------- item cards (all widths) ---------- */
+.order-content .lft .mn-ls-vw .ls-vw{
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 8px;
+  min-height: 0;
+  border-radius: var(--rp-radius-lg);
+}
+.order-content .lft .mn-ls-vw .ls-vw:hover{ transform: translateY(-2px); }
+.order-content .lft .mn-ls-vw .ls-vw:active{ transform: scale(.98); }
+.order-content .lft .mn-ls-vw .ls-vw .ls-vw-ic{
+  --tone: var(--rp-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 50px;
+  margin: 0;
+  border-radius: var(--rp-radius);
+  font-family: var(--rp-font-heading);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: var(--tone);
+  background:
+    radial-gradient(circle at 85% 15%, color-mix(in srgb, var(--tone) 22%, transparent) 0, transparent 55%),
+    color-mix(in srgb, var(--tone) 12%, var(--rp-surface-solid));
+}
+.order-content .lft .mn-ls-vw .ls-vw h4{
+  margin: 0;
+  min-height: 2.7em; // two lines, so prices line up across a row
+  font-size: var(--rp-fs-sm);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.order-content .lft .mn-ls-vw .ls-vw .ls-vw-ft{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: auto;
+  color: var(--rp-text);
+}
+.order-content .lft .mn-ls-vw .ls-vw .ls-vw-price{
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--rp-text);
+  .icon{ font-size: 12px; margin-right: 1px; }
+}
+.order-content .lft .mn-ls-vw .ls-vw .spl-icon{
+  position: static;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  border-radius: 50%;
+  font-size: 13px;
+  color: var(--rp-on-primary);
+  background: var(--rp-primary);
+  box-shadow: var(--rp-primary-shadow);
+}
+.order-content .lft .mn-ls-vw .ls-vw:hover .spl-icon{ background: var(--rp-primary-hover); }
+
+/* ---------- item grid (wide screens) ----------
+   Categories stay the vertical list on the left (styles.scss); the items beside them fill a grid. */
+@media (min-width: 1200px){
+  .order-content .lft .mn-ls-vw-bg{ min-width: 0; }
+  .order-content .lft .mn-list-bg{ width: 290px; } // categories: a little wider than before
+  .order-content .lft .mn-ls-vw{
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    gap: 12px;
+    align-content: start;
+    overflow-y: auto;
+    padding: 2px 6px 14px 2px;
+    scrollbar-width: thin;
+  }
+  .order-content .lft .mn-ls-vw .ls-vw{ width: auto; max-width: none; margin: 0; flex: none; }
+}
+
+@media (min-width: 1200px) and (max-width: 1599.98px){
+  .order-content .lft .mn-list-bg{ width: 210px; }
+}
+/* ---------- Take away / Home Delivery / Express Stall (wide screens) ----------
+   These screens show the running-bills list (.sh-grd-bg); Dine-in does not. Here the categories
+   become a row of pills above the items; Dine-in keeps the category list on the left. */
+@media (min-width: 1200px){
+  $pills: ".order-content .lft .cnt-scrl:has(> .sh-grd-bg)";
+  #{$pills}{
+    display: grid;
+    grid-template-columns: var(--rp-pos-bills-w, 250px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "bills cats" "bills items";
+    gap: 14px 18px;
+  }
+  #{$pills} > .sh-grd-bg{
+    grid-area: bills;
+    width: auto;
+    height: calc(100vh - var(--rp-header-h) - 30px);
+  }
+  #{$pills} > .mn-list-bg{
+    grid-area: cats;
+    width: auto;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 2px 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  #{$pills} > .mn-list-bg .mn-list{
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+    padding: 9px 18px;
+    white-space: nowrap;
+    border-radius: var(--rp-radius-pill);
+    box-shadow: none;
+  }
+  #{$pills} > .mn-list-bg .mn-list.active{ box-shadow: var(--rp-primary-shadow); }
+  #{$pills} > .mn-list-bg .mn-list.active::before{ display: none; } // the check mark only fits the tall tabs
+  #{$pills} > .mn-list-bg .mn-list h4{ line-height: 18px; }
+  #{$pills} > .mn-ls-vw-bg{
+    grid-area: items;
+    width: auto;
+    height: calc(100vh - var(--rp-header-h) - 92px);
+    margin: 0;
+  }
+}
+@media (min-width: 1200px) and (max-width: 1599.98px){
+  :root{ --rp-pos-bills-w: 200px; }
+}
+
+// dark theme: lighter initials on a stronger tint so they read on dark cards
+:root[data-theme="carbon"] .order-content .lft .mn-ls-vw .ls-vw .ls-vw-ic{
+  color: color-mix(in srgb, var(--tone) 45%, #ffffff);
+  background: color-mix(in srgb, var(--tone) 30%, var(--rp-surface-solid));
+}
+
+/* ---------- bill panel ---------- */
+.order-content .rgt .container-bill .order-list .ls p .btn-sm{
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 700;
+}
+.order-content .rgt .container-bill .order-list .ls h2 span{ font-weight: 500; }
+.order-content .rgt .container-bill .price-tag{ background: var(--rp-surface-alt); }
+.order-content .rgt .container-bill .price-tag .ls .pr-lft{ align-items: flex-end; flex-wrap: wrap; gap: 8px 14px; }
+.order-content .rgt .container-bill .price-tag .ls .pr-lft h4:last-child{
+  margin-left: auto;
+  text-align: right;
+}
+.order-content .rgt .container-bill .price-tag .ls .pr-lft h4:last-child .spl{
+  font-family: var(--rp-font-heading);
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+.order-content .rgt .container-bill .btn-bg .col-md-12{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.order-content .rgt .container-bill .btn-bg .btn{ margin: 0; min-height: 44px; padding-left: 18px; padding-right: 18px; }
+.order-content .rgt .container-bill .btn-bg .btn-link{ min-height: 0; padding: 0 4px; }
+.order-content .rgt .container-bill .btn-bg .pos-pay{
+  --bs-btn-bg: var(--rp-success);
+  --bs-btn-border-color: var(--rp-success);
+  --bs-btn-hover-bg: var(--rp-success-hover);
+  --bs-btn-hover-border-color: var(--rp-success-hover);
+  --bs-btn-active-bg: var(--rp-success-active);
+  --bs-btn-active-border-color: var(--rp-success-active);
+  --bs-btn-disabled-bg: var(--rp-success);
+  --bs-btn-disabled-border-color: var(--rp-success);
+  --bs-btn-color: #fff;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-color: #fff;
+  --bs-btn-disabled-color: #fff;
+  background-image: none; // themes with gradient primary buttons
+  min-width: 130px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--rp-success) 35%, transparent);
+}
+.order-content .rgt .container-bill .btn-bg .pos-pay:disabled{ box-shadow: none; }
+
+:root[data-density="compact"]{
+  .order-content .lft .mn-ls-vw .ls-vw .ls-vw-ic{ height: 42px; font-size: 17px; }
+  .order-content .lft .mn-ls-vw{ gap: 10px; }
+  .order-content .rgt .container-bill .btn-bg .btn{ min-height: 40px; }
+}
