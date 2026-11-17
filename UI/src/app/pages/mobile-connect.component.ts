@@ -4,7 +4,7 @@ import { QueryService } from '@appservices/query.service';
 import { AppSettings } from '../core/constants/Appsettings';
 import { encodeQr } from '../shared/qr-code';
 
-// Settings > Mobile App Connect: the server this UI is connected to, as http://ip:port/, with a QR
+// Settings > Mobile App Connect: the server this UI is connected to, as http://ip:port/<app>/, with a QR
 // code of the same text for the mobile app to scan. When the UI talks to the API as "localhost"
 // (which a phone cannot reach), the server's own network IP from the API is shown instead.
 @Component({
@@ -92,8 +92,9 @@ export class MobileConnectComponent implements OnInit, AfterViewChecked {
     });
   }
 
-  // http://ip:port/ of the server this UI uses. A loopback host in the UI config is replaced by the
-  // server's preferred network IP (the API lists it first); the scheme and port stay the UI's.
+  // http://ip:port/<IIS app>/ of the server this UI uses. A loopback host in the UI config is replaced
+  // by the server's preferred network IP (the API lists it first); the scheme and port stay the UI's.
+  // The IIS application path (e.g. /SmartdineAPI) is kept so the mobile app finds the API under any name.
   static serverUrlFor(apiUrl: string, info: any): string {
     let url: URL;
     try { url = new URL(apiUrl, location.href); } catch { return ''; }
@@ -101,7 +102,9 @@ export class MobileConnectComponent implements OnInit, AfterViewChecked {
     const host = loopback ? info?.addresses?.[0]?.ip : url.hostname;
     if (!host) return '';
     const port = url.port || String(info?.port || '');
-    return `${url.protocol}//${host}${port ? ':' + port : ''}/`;
+    let appPath = url.pathname.replace(/\/+$/, '').replace(/\/api$/i, '').replace(/^\/+/, '');
+    if (!appPath && info?.basePath) appPath = String(info.basePath).replace(/^\/+|\/+$/g, '');
+    return `${url.protocol}//${host}${port ? ':' + port : ''}/${appPath ? appPath + '/' : ''}`;
   }
 
   copy(): void {

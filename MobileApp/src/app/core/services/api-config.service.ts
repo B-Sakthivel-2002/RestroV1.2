@@ -7,13 +7,14 @@ export interface ProbeResult {
 }
 
 // Where the API lives. The web app's Settings > Mobile App Connect QR holds only the server
-// address (http://ip:port/), so the API path is found by asking the server: the API is either at
-// the root (Kestrel: /api/) or under an IIS application (e.g. /Resto/api/).
+// address and IIS application (http://ip:port/SmartdineAPI/). A bare address typed by hand is
+// resolved by asking the server: the API is either at the root (Kestrel: /api/) or under a known
+// IIS application (/SmartdineAPI/api/, /Smartdine/api/, /Resto/api/).
 @Injectable({ providedIn: 'root' })
 export class ApiConfigService {
   private static readonly KEY = 'api_base_url';
   private static readonly LEGACY_KEY = 'api_server_address'; // older app versions: "host:port" under /Resto/api/
-  private static readonly APP_PATHS = ['api/', 'Resto/api/'];
+  private static readonly APP_PATHS = ['api/', 'SmartdineAPI/api/', 'Smartdine/api/', 'Resto/api/'];
   private static readonly PROBE_MS = 5000;
 
   private readonly base = signal<string>(ApiConfigService.load());
@@ -79,7 +80,7 @@ export class ApiConfigService {
     return {
       ok: false,
       message: reached
-        ? 'The server answered, but no Restro API was found at that address.'
+        ? 'The server answered, but no SmartDine API was found at that address.'
         : 'Cannot reach the server. Check that the phone is on the same Wi-Fi and the address is right.',
     };
   }
