@@ -89,6 +89,8 @@ public class AuthController : ControllerBase
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Username),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            // Issue time: "Log out all devices" refuses tokens issued before it (SessionRevocation).
+            new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Role, role ?? "User"),
             new Claim(TenantClaims.UserId, user.Userid.ToString()),

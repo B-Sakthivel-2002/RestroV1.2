@@ -98,7 +98,6 @@ export interface IShortBillForReport {
                   <!-- {{subMenuList | json}}  -->
                   @for (sb of subMenuList; track sb.itemid) {
                     <div class="ls-vw" (click)="addOrderList(sb)">
-                      <span class="ls-vw-ic" [style.--tone]="itemTone(sb.name)" aria-hidden="true">{{ itemCode(sb) }}</span>
                       <h4>{{ sb.name }}</h4>
                       <span class="ls-vw-ft"
                         ><span class="ls-vw-price"><i class="icon pi pi-indian-rupee"></i>{{ sb.price }}</span>
@@ -128,30 +127,8 @@ export interface IShortBillForReport {
                   <p class="spl-bg">{{ tableName }}</p>
                 </div>
               </div>
-              @if (typeId == 1 && +tableId > 0) {
-                <div class="table-ops">
-                  <button type="button" class="btn btn-sm btn-outline-secondary" (click)="openTableAction('transfer')" title="Move this table's orders to a free table">
-                    <i class="pi pi-arrow-right-arrow-left"></i> Transfer
-                  </button>
-                  <button type="button" class="btn btn-sm btn-outline-secondary" (click)="openTableAction('merge')" title="Join other tables to this table">
-                    <i class="pi pi-objects-column"></i> Merge
-                  </button>
-                  <button type="button" class="btn btn-sm btn-outline-secondary" (click)="openTableAction('split')" title="Separate bills for guests at this table">
-                    <i class="pi pi-clone"></i> Split bill
-                  </button>
-                </div>
-                @if (splitMode) {
-                  <div class="guest-tabs">
-                    @for (g of guestTabs; track g.guestlabel) {
-                      <button type="button" class="btn btn-sm" [class.btn-primary]="g.guestlabel === selectedGuest" [class.btn-outline-primary]="g.guestlabel !== selectedGuest" (click)="selectGuest(g.guestlabel)">
-                        {{ g.guestlabel || g.customername || 'Unknown' }} &middot; {{ g.total | number:'1.0-2' }}
-                        @if (g.printed) { <i class="pi pi-print" title="Bill printed"></i> }
-                      </button>
-                    }
-                  </div>
-                }
-              }
-              <div class="mini-tab">
+              <!-- One row: customer / comments / discount, then the dine-in table actions. -->
+              <div class="mini-tab bill-tools">
                 <button
                   class="btn btn-outline-primary"
                   [class.active]="miniTabOption['customer']"
@@ -180,7 +157,29 @@ export interface IShortBillForReport {
                 >
                   %
                 </button>
+                @if (typeId == 1 && +tableId > 0) {
+                  <span class="tools-sep" aria-hidden="true"></span>
+                  <button type="button" class="btn btn-outline-secondary tool-txt" (click)="openTableAction('transfer')" title="Move this table's orders to a free table">
+                    <i class="pi pi-arrow-right-arrow-left"></i> Transfer
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary tool-txt" (click)="openTableAction('merge')" title="Join other tables to this table">
+                    <i class="pi pi-objects-column"></i> Merge
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary tool-txt" (click)="openTableAction('split')" title="Separate bills for guests at this table">
+                    <i class="pi pi-clone"></i> Split bill
+                  </button>
+                }
               </div>
+              @if (typeId == 1 && +tableId > 0 && splitMode) {
+                <div class="guest-tabs">
+                  @for (g of guestTabs; track g.guestlabel) {
+                    <button type="button" class="btn btn-sm" [class.btn-primary]="g.guestlabel === selectedGuest" [class.btn-outline-primary]="g.guestlabel !== selectedGuest" (click)="selectGuest(g.guestlabel)">
+                      {{ g.guestlabel || g.customername || 'Unknown' }} &middot; {{ g.total | number:'1.0-2' }}
+                      @if (g.printed) { <i class="pi pi-print" title="Bill printed"></i> }
+                    </button>
+                  }
+                </div>
+              }
             </div>
 
             <div class="container-bill ct-frm-bg">
@@ -781,8 +780,12 @@ export interface IShortBillForReport {
     </ng-template>
   `,
   styles: `
-    .table-ops, .guest-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
-    .guest-tabs { padding-top: 0; }
+    .guest-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
+    /* Customer, comments, discount, transfer, merge and split bill on one line. */
+    .bill-tools { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; overflow-x: auto; }
+    .bill-tools .btn { margin: 0; flex: 0 0 auto; white-space: nowrap; }
+    .bill-tools .tool-txt { padding: 4px 10px; font-size: var(--rp-fs-sm); }
+    .bill-tools .tools-sep { flex: 0 0 1px; align-self: stretch; margin: 2px 4px; background: var(--rp-border); }
     .pay-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 15px; border-top: 1px solid var(--rp-border); background: var(--rp-surface-alt); }
     .pay-modes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
     .pay-label, .pay-detail label { font-size: var(--rp-fs-xs); color: var(--rp-text-muted); margin: 0 4px 0 0; }
@@ -902,20 +905,6 @@ export class OrderComponent implements OnInit {
   postBill: any = { ...this.defaultPostBill };
 
   destroy$ = new Subject<void>();
-
-  // Item card tile: the item Code from the menu master; initials only when an item has no code.
-  itemCode(item: any): string {
-    return (item?.code || '').toString().trim().toUpperCase() || this.itemInitials(item?.name);
-  }
-  itemInitials(name: string): string {
-    const w = (name || '').trim().split(/\s+/).filter(Boolean);
-    return ((w[0]?.[0] || '') + (w[1]?.[0] || '')).toUpperCase() || '?';
-  }
-  itemTone(name: string): string {
-    let h = 0;
-    for (const c of name || '') h = (h * 31 + c.charCodeAt(0)) >>> 0;
-    return this.colorList[h % this.colorList.length];
-  }
 
   colorList: string[] = [
     '#0f766e',
@@ -1314,6 +1303,7 @@ width: 150px;
       next: (res: any) => {
         this.orderTypeList = res.data ? res.data : [];
         this.branchHasStall = !!res.expressStall;
+        this.expressStallNoTax = !!res.expressStallNoTax;
         console.log(res, 'res');
         this.applyMenuFilter();
       },
@@ -1370,6 +1360,9 @@ width: 150px;
       error: (err: any) => {},
     });
   }
+
+  // API appsettings BillingSettings:ExpressStallNoTax: Express Stall orders are not taxed.
+  expressStallNoTax = false;
 
   get isExpressStall(): boolean {
     return this.branchHasStall && isExpressStallType(this.orderTypeList.find((x: any) => x.ordertypeid == this.typeId));
@@ -1721,7 +1714,10 @@ width: 150px;
     createBillObj.orderids = this.postBill.orders
       .filter((x: any) => x.flag)
       .map((x: any) => x.orderid);
-    createBillObj.taxid = this.postBill.taxList.map((x: any) => x.taxid);
+    // No tax ids on an untaxed Express Stall bill (BillingSettings:ExpressStallNoTax).
+    createBillObj.taxid = this.expressStallNoTax && this.isExpressStall
+      ? []
+      : this.postBill.taxList.map((x: any) => x.taxid);
 
     this.query
       .setBillList(createBillObj)
@@ -2098,7 +2094,9 @@ width: 150px;
     this.postBill.tax = 0;
     this.postBill.extraAmount = 0;
 
-    if (this.taxList.length && localtotalprice) {
+    // Same as the API: no tax on Express Stall orders when BillingSettings:ExpressStallNoTax is on.
+    const noTax = this.expressStallNoTax && this.isExpressStall;
+    if (this.taxList.length && localtotalprice && !noTax) {
       let localTaxAmount = 0;
       this.taxList.forEach((x: any) => {
         const inRange = x.taxrangestatus

@@ -69,6 +69,11 @@ export const menuList ={
           icon: ""
         },
         {
+          name: "Home Delivery Report",
+          url: "/home-delivery-report",
+          icon: ""
+        },
+        {
           name: "Customer wise Report",
           url: "/customer-wise-report",
           icon: ""
@@ -156,11 +161,6 @@ export const menuList ={
         {
           name: "Menu List",
           url: "/menu-list",
-          icon: "preferences"
-        },
-        {
-          name: "Menu Type",
-          url: "/menu-type",
           icon: "preferences"
         },
         {

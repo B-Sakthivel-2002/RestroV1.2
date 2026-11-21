@@ -220,6 +220,12 @@ export const routes: Routes = [
       data:{dataRoles:['Admin','SuperAdmin','Manager']}
    },
    {
+      path:'home-delivery-report',
+      loadComponent:()=>import('./pages/home-delivery-report.component').then(m=>m.HomeDeliveryReportComponent),
+      data:{dataRoles:['Admin','SuperAdmin','Captain']},
+      canActivate: [RoleGuard]
+   },
+   {
       path:'customer-wise-report',
       loadComponent:()=>import('./pages/customer-wise-report.component').then(m=>m.CustomerWiseReportComponent),
       data:{dataRoles:['Admin','SuperAdmin']},
@@ -241,6 +247,11 @@ export const routes: Routes = [
       canActivate: [RoleGuard]
    },{
       // every role: the theme is a per-device preference
+      path:'settings/profile',
+      loadComponent:()=>import('./pages/profile.component').then(m=>m.ProfileComponent),
+      data:{dataRoles:['Admin','SuperAdmin','Manager','Captain','Chef','Cheif','Waiter','Cashier','Kitchen Staff']},
+      canActivate: [RoleGuard]
+   },{
       path:'settings/theme',
       loadComponent:()=>import('./pages/theme-settings.component').then(m=>m.ThemeSettingsComponent),
       data:{dataRoles:['Admin','SuperAdmin','Manager','Captain','Chef','Cheif']},

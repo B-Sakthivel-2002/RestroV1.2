@@ -14,7 +14,9 @@ import { AuthService } from '../core/services/auth.service';
 import { UiService } from '../core/services/ui.service';
 import { apiError } from '../core/guards/auth-interceptor.service';
 
-type TileKind = 'free' | 'kitchen' | 'billed' | 'reserved' | 'blocked' | 'merged' | 'seated';
+// Same four looks as the web Dine in screen: Available (white), Order in Kitchen (red),
+// Ready for bill (green), Merged (red). Keep both in step.
+type TileKind = 'free' | 'kitchen' | 'billed' | 'merged';
 
 interface Tile {
   t: any;
@@ -50,13 +52,8 @@ export class DineinPage {
     return this.tiles().filter(x => f == null || x.t.floorid === f);
   });
   readonly counts = computed(() => {
-    const c = { free: 0, busy: 0, billed: 0, reserved: 0 };
-    for (const x of this.visible()) {
-      if (x.kind === 'free') c.free++;
-      else if (x.kind === 'kitchen' || x.kind === 'seated') c.busy++;
-      else if (x.kind === 'billed') c.billed++;
-      else if (x.kind === 'reserved') c.reserved++;
-    }
+    const c = { free: 0, kitchen: 0, billed: 0, merged: 0 };
+    for (const x of this.visible()) c[x.kind]++;
     return c;
   });
 
@@ -121,17 +118,13 @@ export class DineinPage {
     this.router.navigate(['/order', target.tableid, target.floorid, 1, target.tablename]);
   }
 
+  // Same rules and wording as the web Dine in tiles (UI dinein.component.ts).
   static tile(t: any): Tile {
     if (t.mergedinto) return { t, kind: 'merged', label: 'Merged', sub: 'with ' + (t.mergedintoname || '') };
-    if (t.orderStatus === 'printed') return { t, kind: 'billed', label: 'Bill printed', sub: '' };
-    if (t.orderStatus === 'submitted') {
-      return { t, kind: 'kitchen', label: 'In kitchen', sub: t.seatedToken ? `${t.seatedToken}${t.seatedName ? ' · ' + t.seatedName : ''}` : '' };
-    }
-    if (t.seatedToken) return { t, kind: 'seated', label: 'Seated', sub: `${t.seatedToken}${t.seatedName ? ' · ' + t.seatedName : ''}` };
-    const state = String(t.tablestate || '');
-    if (state === 'Reserved') return { t, kind: 'reserved', label: 'Reserved', sub: t.tokencode ? 'for ' + t.tokencode : '' };
-    if (state === 'Blocked') return { t, kind: 'blocked', label: 'Blocked', sub: '' };
-    if (state && state !== 'Available') return { t, kind: 'blocked', label: state, sub: '' };
-    return { t, kind: 'free', label: 'Available', sub: '' };
+    const sub = t.seatedToken ? `Occupied by ${t.seatedToken}${t.seatedName ? ' · ' + t.seatedName : ''}`
+      : t.tablestate === 'Reserved' && t.tokencode ? `Reserved for ${t.tokencode}` : '';
+    if (t.orderStatus === 'submitted') return { t, kind: 'kitchen', label: 'Order in Kitchen', sub };
+    if (t.orderStatus === 'printed') return { t, kind: 'billed', label: 'Ready for bill', sub };
+    return { t, kind: 'free', label: 'Available', sub };
   }
 }

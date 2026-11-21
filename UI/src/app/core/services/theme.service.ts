@@ -39,10 +39,10 @@ export const THEMES: ThemeDef[] = [
     metaColor: '#4361ee'
   },
   {
-    id: 'orchid', name: 'Orchid', tagline: 'Soft purple gradients, rounded cards, side menu', dark: false,
+    id: 'orchid', name: 'Orchid', tagline: 'Ocean blue gradients, rounded cards, side menu', dark: false,
     nav: 'side', density: 'comfortable', font: 'Plus Jakarta Sans',
-    preview: { bg: '#ecebf1', surface: '#f8f7fb', nav: '#f8f7fb', navText: '#6b6680', primary: '#7c3aed', accent: '#3b0764', text: '#2e1065' },
-    metaColor: '#7c3aed'
+    preview: { bg: '#e3edf3', surface: '#f5fafd', nav: '#f5fafd', navText: '#4a667c', primary: '#0077b6', accent: '#03045e', text: '#0b1f3a' },
+    metaColor: '#0077b6'
   },
   {
     id: 'midnight', name: 'Midnight', tagline: 'Navy sidebar, colourful KPI cards', dark: false,

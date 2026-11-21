@@ -3,7 +3,7 @@
    Selected by <html data-theme> (ThemeService). Each theme is a whole look:
    tokens (palette, font, shape, surfaces, navigation colours) plus a few signature
    component treatments. Classic is the base in styles.scss, so it needs no block here.
-     orchid    soft purple, gradient KPI cards, floating rounded panels, side menu
+     orchid    ocean blue, gradient KPI cards, floating rounded panels, side menu
      midnight  navy sidebar, multi-colour KPI cards with sparklines
      carbon    dark, compact, high contrast (Bootstrap dark mode on)
    ===================================================================== */
@@ -14,35 +14,36 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
 /* =====================================================================
    ORCHID
    ===================================================================== */
+// Ocean palette (user, 2026-11-21): #03045E #023E8A #0077B6 #0096C7 #00B4D8 #48CAE4 #90E0EF #ADE8F4 #CAF0F8
 :root[data-theme="orchid"]{
-  --rp-primary: #7c3aed;
-  --rp-primary-rgb: 124, 58, 237;
-  --rp-primary-hover: #6d28d9;
-  --rp-primary-active: #5b21b6;
-  --rp-primary-soft: #f1eafe;
-  --rp-primary-ring: rgba(124, 58, 237, 0.18);
-  --rp-primary-deep: #3b0764;
-  --rp-primary-shadow: 0 6px 16px rgba(124, 58, 237, 0.32);
-  --rp-hero: linear-gradient(160deg, #2e0a6b 0%, #5b21b6 55%, #8b5cf6 100%);
-  --rp-hero-shadow: 0 14px 30px rgba(91, 33, 182, 0.28);
+  --rp-primary: #0077b6;
+  --rp-primary-rgb: 0, 119, 182;
+  --rp-primary-hover: #023e8a;
+  --rp-primary-active: #03045e;
+  --rp-primary-soft: #e3f6fb;
+  --rp-primary-ring: rgba(0, 119, 182, 0.18);
+  --rp-primary-deep: #03045e;
+  --rp-primary-shadow: 0 6px 16px rgba(0, 119, 182, 0.32);
+  --rp-hero: linear-gradient(160deg, #03045e 0%, #023e8a 55%, #0077b6 100%);
+  --rp-hero-shadow: 0 14px 30px rgba(2, 62, 138, 0.28);
 
-  --rp-bg: #e6e5ec;
+  --rp-bg: #e3edf3;
   --rp-surface: #ffffff;
   --rp-surface-solid: #ffffff;
-  --rp-surface-alt: #f7f4fc;
-  --rp-border: #ece8f4;
-  --rp-border-strong: #dcd3ec;
-  --rp-row-hover: #faf7ff;
-  --rp-neutral-soft: #f1eef7;
-  --rp-neutral-line: #e6e0f0;
-  --rp-neutral-strong: #d8cfe8;
-  --rp-info-soft: #ede4ff;
-  --rp-info-ink: #4c1d95;
+  --rp-surface-alt: #f2f9fc;
+  --rp-border: #dcebf2;
+  --rp-border-strong: #c3dfeb;
+  --rp-row-hover: #f2fafd;
+  --rp-neutral-soft: #eaf4f8;
+  --rp-neutral-line: #d7e8f0;
+  --rp-neutral-strong: #c2dbe7;
+  --rp-info-soft: #caf0f8;
+  --rp-info-ink: #023e8a;
 
-  --rp-text: #251b3d;
-  --rp-text-muted: #7d7596;
-  --rp-text-subtle: #ada6c2;
-  --rp-dark: #2e1065;
+  --rp-text: #0b1f3a;
+  --rp-text-muted: #5d7890;
+  --rp-text-subtle: #9bb2c2;
+  --rp-dark: #03045e;
 
   --rp-font: "Plus Jakarta Sans", system-ui, sans-serif;
   --rp-heading-weight: 800;
@@ -54,26 +55,26 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
   --rp-control-radius: 12px;
   --rp-btn-radius: 999px;
 
-  --rp-shadow-sm: 0 1px 2px rgba(46, 16, 101, 0.04);
-  --rp-shadow-md: 0 10px 24px rgba(46, 16, 101, 0.08);
-  --rp-shadow-lg: 0 24px 48px rgba(46, 16, 101, 0.16);
+  --rp-shadow-sm: 0 1px 2px rgba(3, 4, 94, 0.04);
+  --rp-shadow-md: 0 10px 24px rgba(3, 4, 94, 0.08);
+  --rp-shadow-lg: 0 24px 48px rgba(3, 4, 94, 0.16);
 
-  // floating light sidebar, purple pill for the current page, bar on the left edge
+  // floating light sidebar, blue pill for the current page, bar on the left edge
   --rp-side-inset: 16px;
   --rp-topbar-inset: 16px;
   --rp-topbar-h: 72px;
-  --rp-nav-bg: #f8f7fb;
-  --rp-nav-text: #5b5470;
-  --rp-nav-strong: #251b3d;
-  --rp-nav-muted: #a29cb6;
-  --rp-nav-hover: #efeaf8;
-  --rp-nav-active-bg: linear-gradient(90deg, #e7dafd, #f4eeff);
-  --rp-nav-active-text: #2e1065;
-  --rp-nav-indicator: #7c3aed;
+  --rp-nav-bg: #f5fafd;
+  --rp-nav-text: #4a667c;
+  --rp-nav-strong: #0b1f3a;
+  --rp-nav-muted: #92adbf;
+  --rp-nav-hover: #e3f3f9;
+  --rp-nav-active-bg: linear-gradient(90deg, #ade8f4, #caf0f8);
+  --rp-nav-active-text: #03045e;
+  --rp-nav-indicator: #0077b6;
   --rp-nav-border: transparent;
   --rp-nav-radius: 28px;
   --rp-nav-item-radius: 14px;
-  --rp-topbar-bg: #f8f7fb;
+  --rp-topbar-bg: #f5fafd;
   --rp-topbar-border: transparent;
   --rp-topbar-radius: 28px;
   --rp-topbar-shadow: 0 -16px 0 16px var(--rp-bg); // hides content scrolling above the floating bar
@@ -88,18 +89,18 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
     .custom-navbar-bg{
       top: 16px;
       margin: 16px 16px 0;
-      background: #f8f7fb;
+      background: #f5fafd;
       border: 0;
       border-radius: 24px;
       box-shadow: 0 -16px 0 16px var(--rp-bg); // hides content scrolling above the floating bar
     }
     .custom-navbar-bg .navbar{ padding: 10px 18px; }
-    .custom-navbar-bg .navbar .navbar-nav .nav-link{ color: #5b5470; border-radius: 999px; padding: 8px 14px; }
-    .custom-navbar-bg .navbar .navbar-nav .nav-link .icon{ color: #8b5cf6; }
+    .custom-navbar-bg .navbar .navbar-nav .nav-link{ color: #4a667c; border-radius: 999px; padding: 8px 14px; }
+    .custom-navbar-bg .navbar .navbar-nav .nav-link .icon{ color: #0096c7; }
     .custom-navbar-bg .navbar .navbar-nav .nav-link:hover,
-    .custom-navbar-bg .navbar .navbar-nav .nav-link.show{ background: #efeaf8; color: #251b3d; }
+    .custom-navbar-bg .navbar .navbar-nav .nav-link.show{ background: #e3f3f9; color: #0b1f3a; }
     .custom-navbar-bg .navbar .navbar-nav .nav-link.active,
-    .custom-navbar-bg .navbar .navbar-nav .nav-item.current > .nav-link{ background: linear-gradient(90deg, #e7dafd, #f4eeff); color: #2e1065; font-weight: 600; }
+    .custom-navbar-bg .navbar .navbar-nav .nav-item.current > .nav-link{ background: linear-gradient(90deg, #ade8f4, #caf0f8); color: #03045e; font-weight: 600; }
     @media (max-width: 1439.98px){ .custom-navbar-bg .navbar .navbar-nav .nav-link{ padding: 8px 10px; } }
   }
 
@@ -109,25 +110,25 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
   .sub-header .tt .mn-tt, .sub-header .tt .cs-mn-tt, .main-title .sub-title{
     font-size: 28px;
     font-weight: 800;
-    background: linear-gradient(90deg, #2e1065, #7c3aed);
+    background: linear-gradient(90deg, #03045e, #0077b6);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
 
-  .btn-primary{ background-image: linear-gradient(135deg, #8b5cf6, #6d28d9); border-color: transparent; box-shadow: var(--rp-primary-shadow); }
+  .btn-primary{ background-image: linear-gradient(135deg, #0096c7, #023e8a); border-color: transparent; box-shadow: var(--rp-primary-shadow); }
   .btn-outline-primary{ border-width: 2px; }
   .custom-table .btn-primary{ background-image: none; box-shadow: none; }
 
-  .custom-table th{ background: #f5effe; color: #6d5a96; }
-  .nav-pills .nav-link.active{ background-image: linear-gradient(135deg, #8b5cf6, #6d28d9); }
+  .custom-table th{ background: #e6f6fb; color: #2d5d7c; }
+  .nav-pills .nav-link.active{ background-image: linear-gradient(135deg, #0096c7, #023e8a); }
 
-  // KPI cards: purple gradient family with a round arrow badge (image-1 style)
+  // KPI cards: blue gradient family with a round arrow badge (darker shades so white text stays readable)
   .ds-grd-box .grd-cnt{ position: relative; border: 0; color: #fff; box-shadow: var(--rp-hero-shadow); }
   .ds-grd-box .grd-cnt:nth-child(4n+1){ background: var(--rp-hero); }
-  .ds-grd-box .grd-cnt:nth-child(4n+2){ background: linear-gradient(150deg, #9d4edd, #c77dff); }
-  .ds-grd-box .grd-cnt:nth-child(4n+3){ background: linear-gradient(150deg, #8b5cf6, #b794f6); }
-  .ds-grd-box .grd-cnt:nth-child(4n+4){ background: linear-gradient(150deg, #b06ef3, #d8b4fe); }
+  .ds-grd-box .grd-cnt:nth-child(4n+2){ background: linear-gradient(150deg, #0077b6, #00b4d8); }
+  .ds-grd-box .grd-cnt:nth-child(4n+3){ background: linear-gradient(150deg, #023e8a, #0096c7); }
+  .ds-grd-box .grd-cnt:nth-child(4n+4){ background: linear-gradient(150deg, #0096c7, #48cae4); }
   .ds-grd-box .grd-cnt > span, .ds-grd-box .grd-cnt .sm-cnt .sb-tt{ color: rgba(255, 255, 255, .82); }
   .ds-grd-box .grd-cnt .sm-cnt{ border-top-color: rgba(255, 255, 255, .25); }
   .ds-grd-box .grd-cnt .sm-cnt .sb-tt b.badge{ background: rgba(255, 255, 255, .25); }
@@ -140,7 +141,7 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
     height: 30px;
     border-radius: 50%;
     background: #fff;
-    color: #5b21b6;
+    color: #023e8a;
     font-weight: 700;
     display: flex;
     align-items: center;
@@ -149,7 +150,7 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
 
   .dinein-list .list{ border-color: transparent; box-shadow: var(--rp-shadow-md); }
   .kot-card, .cs-tab .tab-content{ border-color: transparent; box-shadow: var(--rp-shadow-md); }
-  .order-content .lft .mn-list.active{ background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
+  .order-content .lft .mn-list.active{ background: linear-gradient(135deg, #0096c7, #023e8a); }
   .hero-login{ border: 0; }
 }
 
@@ -351,7 +352,7 @@ $rp-spark: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox
   .custom-table th{ padding: 9px 12px; }
   .custom-table td{ padding: 8px 12px; }
   .dinein-list{ gap: 20px 14px; padding: 10px 20px 20px; }
-  .dinein-list .list{ min-width: 170px; min-height: 92px; padding: 18px 14px 12px; }
+  .dinein-list .list{ min-height: 92px; padding: 18px 14px 12px; }
   .kot-card{ padding: 12px; margin-bottom: 12px; }
   .kot-container{ column-gap: 12px; }
   .order-content .lft .mn-list{ padding: 10px 14px; margin-bottom: 8px; }

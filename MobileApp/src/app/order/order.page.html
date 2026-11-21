@@ -182,7 +182,8 @@
               <div class="row-between">
                 <label class="incl">
                   <input type="checkbox" [checked]="o.flag" (change)="toggleInclude(o)" />
-                  <b>#{{ o.ordernumber || o.orderid }}</b>
+                  <!-- Same as the web order screen: the short order id -->
+                  <b class="oid">Order Id. {{ o.orderid }}</b>
                   <span class="muted">{{ o.timedate | date:'h:mm a' }}</span>
                 </label>
                 <div class="row-between">

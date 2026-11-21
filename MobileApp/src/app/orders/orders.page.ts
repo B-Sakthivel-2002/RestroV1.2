@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { IonContent, IonHeader, IonIcon, IonRefresher, IonRefresherContent, IonTitle, IonToolbar } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { calendarOutline, chevronDownOutline, chevronUpOutline, closeCircleOutline, receiptOutline } from 'ionicons/icons';
+import { calendarOutline, chevronDownOutline, chevronUpOutline, receiptOutline } from 'ionicons/icons';
 import { debounceTime, merge } from 'rxjs';
 import { QueryService, isoDate } from '../core/services/query.service';
 import { LiveHubService } from '../core/services/live-hub.service';
@@ -13,7 +13,7 @@ import { apiError } from '../core/guards/auth-interceptor.service';
 
 type Status = 'all' | 'submitted' | 'printed' | 'approved' | 'cancelled';
 
-// Order history for a day (web: /order-histroy), with cancel for open orders.
+// Order history for a day (web: /order-histroy). View only: orders are not cancelled from the mobile app.
 @Component({
   selector: 'app-orders',
   standalone: true,
@@ -63,11 +63,6 @@ type Status = 'all' | 'submitted' | 'printed' | 'approved' | 'cancelled';
                     <div class="ln"><span><b>{{ d.qty }}×</b> {{ d.name }}</span><span class="money">₹{{ d.sumofprice | number:'1.0-2' }}</span></div>
                   }
                   @if (o.comments) { <p class="muted cm">“{{ o.comments }}”</p> }
-                  @if (o.status === 'submitted') {
-                    <button class="btn outline-danger sm block" (click)="cancel(o)" [disabled]="busy() === o.orderid">
-                      <ion-icon name="close-circle-outline"></ion-icon> Cancel order
-                    </button>
-                  }
                 </div>
               }
             </div>
@@ -92,7 +87,6 @@ type Status = 'all' | 'submitted' | 'printed' | 'approved' | 'cancelled';
     .ord-body { border-top: 1px solid var(--app-border); padding: 10px 14px 14px; }
     .ln { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; }
     .cm { font-size: 13px; font-style: italic; margin: 6px 0; }
-    .btn.block { margin-top: 10px; }
   `],
 })
 export class OrdersPage {
@@ -110,12 +104,11 @@ export class OrdersPage {
   readonly orders = signal<any[]>([]);
   readonly loading = signal(true);
   readonly open = signal<number | null>(null);
-  readonly busy = signal<number | null>(null);
   readonly count = computed(() => this.orders().length);
   readonly sum = computed(() => this.orders().filter(o => o.status !== 'cancelled').reduce((s, o) => s + (Number(o.totalprice) || 0), 0));
 
   constructor() {
-    addIcons({ calendarOutline, chevronDownOutline, chevronUpOutline, closeCircleOutline, receiptOutline });
+    addIcons({ calendarOutline, chevronDownOutline, chevronUpOutline, receiptOutline });
     merge(this.hub.on('OrderUpdated'), this.hub.on('OrderSettled'), this.hub.resync$)
       .pipe(debounceTime(800), takeUntilDestroyed(inject(DestroyRef)))
       .subscribe(() => { if (this.date() === isoDate()) this.load(); });
@@ -173,20 +166,4 @@ export class OrdersPage {
     }
   }
 
-  async cancel(o: any): Promise<void> {
-    const reason = await this.ui.prompt(`Cancel #${o.ordernumber || o.orderid}?`, 'Reason (the kitchen and captain are told)', 'Cancel order');
-    if (reason === null) return;
-    this.busy.set(o.orderid);
-    this.query.cancelOrder(o.orderid, reason).subscribe({
-      next: () => {
-        this.busy.set(null);
-        this.ui.toast('Order cancelled', 'success');
-        this.load();
-      },
-      error: err => {
-        this.busy.set(null);
-        this.ui.toast(apiError(err, 'Could not cancel the order'), 'error');
-      },
-    });
-  }
 }

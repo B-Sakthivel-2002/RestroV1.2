@@ -71,6 +71,13 @@ ALTER TABLE branch ADD COLUMN IF NOT EXISTS expressstall boolean NOT NULL DEFAUL
 -- Settled bills of the open work period may be cancelled / reopened for editing (per branch, off by default).
 ALTER TABLE branch ADD COLUMN IF NOT EXISTS ordercancel boolean NOT NULL DEFAULT false;
 ALTER TABLE branch ADD COLUMN IF NOT EXISTS orderedit boolean NOT NULL DEFAULT false;
+-- "Log out all devices" per branch (Settings > Profile): logins issued before revokedat (UTC) are refused.
+-- Separate from branch so saving the Branch page never clears it. Not synced.
+CREATE TABLE IF NOT EXISTS branch_session (
+    branchid  integer PRIMARY KEY,
+    revokedat timestamp without time zone NOT NULL,
+    revokedby integer
+);
 
 -- Kitchens of a branch, each with its own KOT printer (Windows printer name as installed on the
 -- API computer, e.g. "EPSON TM-T82" or a shared one "\\KITCHEN-PC\EPSON").

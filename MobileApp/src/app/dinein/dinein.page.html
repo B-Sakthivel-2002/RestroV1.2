@@ -28,11 +28,12 @@
 <ion-content>
   <ion-refresher slot="fixed" (ionRefresh)="refresh($event)"><ion-refresher-content></ion-refresher-content></ion-refresher>
 
-  <div class="stats">
-    <div class="s free"><b>{{ counts().free }}</b><span>Free</span></div>
-    <div class="s busy"><b>{{ counts().busy }}</b><span>Occupied</span></div>
-    <div class="s billed"><b>{{ counts().billed }}</b><span>Billed</span></div>
-    <div class="s reserved"><b>{{ counts().reserved }}</b><span>Reserved</span></div>
+  <!-- Counts per look, with the same colour swatches (hints) as the web Dine in header -->
+  <div class="stats" aria-label="Table colours">
+    <div class="s k-free"><b>{{ counts().free }}</b><span><i></i>Available</span></div>
+    <div class="s k-kitchen"><b>{{ counts().kitchen }}</b><span><i></i>In Kitchen</span></div>
+    <div class="s k-billed"><b>{{ counts().billed }}</b><span><i></i>Ready for bill</span></div>
+    <div class="s k-merged"><b>{{ counts().merged }}</b><span><i></i>Merged</span></div>
   </div>
 
   @if (loading()) {

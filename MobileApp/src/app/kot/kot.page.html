@@ -46,7 +46,8 @@
         <div class="kot card" [class.has-ready]="mode() === 'pickup' && readyCount(o) > 0 && filter() === 'submitted'">
           <div class="kot-head">
             <div>
-              <div class="no">#{{ o.ordernumber || o.orderid }}</div>
+              <!-- Same as the web KOT board: the short order id -->
+              <div class="no">Id : {{ o.orderid }}</div>
               <div class="meta">
                 <span class="badge b-muted">{{ o.orderTypeName || 'Order' }}</span>
                 @if (o.waiter) { <span><ion-icon name="person-outline"></ion-icon>{{ o.waiter }}</span> }
@@ -54,9 +55,9 @@
             </div>
             @if (filter() === 'submitted') {
               @if (mode() === 'kitchen' && pendingCount(o) > 1) {
-                <button class="btn sm success" (click)="actAll(o)"><ion-icon name="checkmark-done-outline"></ion-icon> All ready</button>
+                <button class="btn sm success" (click)="actAll(o)"><ion-icon name="checkmark-done-outline"></ion-icon> All Ready to Serve</button>
               } @else if (mode() === 'pickup' && readyCount(o) > 1) {
-                <button class="btn sm primary" (click)="actAll(o)"><ion-icon name="checkmark-done-outline"></ion-icon> Serve all</button>
+                <button class="btn sm primary" (click)="actAll(o)"><ion-icon name="checkmark-done-outline"></ion-icon> Pick Up All</button>
               }
             } @else {
               <span class="badge" [class.b-success]="filter() === 'approved'" [class.b-danger]="filter() === 'cancelled'">
@@ -76,7 +77,8 @@
                 <span class="nm">{{ d.itemName }}</span>
                 @if (canAct(d)) {
                   <button class="act" [class.pick]="mode() === 'pickup'" (click)="act(o, d)">
-                    <ion-icon name="checkmark-outline"></ion-icon>{{ mode() === 'kitchen' ? 'Ready' : 'Served' }}
+                    <!-- Kitchen marks an item "Ready to Serve"; the captain taps "Pick Up", after which it shows Served -->
+                    <ion-icon name="checkmark-outline"></ion-icon>{{ mode() === 'kitchen' ? 'Ready to Serve' : 'Pick Up' }}
                   </button>
                 } @else {
                   <span class="st">{{ itemState(d) === 'ready' ? 'Ready' : itemState(d) === 'served' ? 'Served' : 'Cooking' }}</span>

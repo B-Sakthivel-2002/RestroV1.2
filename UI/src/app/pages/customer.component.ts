@@ -8,6 +8,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { AlertService } from '@appservices/alert.service';
 import { inject } from '@angular/core';
 import { AuthService } from '@appservices/auth.service';
+import { RouterModule } from '@angular/router';
 import { BranchSelectComponent } from '../shared/component/branch-select.component';
 import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
 
@@ -15,7 +16,7 @@ import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
 @Component({
   selector: 'app-customer',
   standalone: true,
-  imports: [CommonModule,ReactiveFormsModule,BranchSelectComponent,BranchNamePipe],
+  imports: [CommonModule,ReactiveFormsModule,RouterModule,BranchSelectComponent,BranchNamePipe],
   providers:[BsModalService,AlertService],
   template: `
   <div class="wrapper">
@@ -25,7 +26,13 @@ import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
                     <h2 class="mn-tt">Customer</h2>
                   </div>  
                   <div class="btn-bg">
-                    <button type="button" class="btn btn-primary" (click)="openModal(customerTemplate);setCustomerList('create',0);">+ Create customer</button> 
+                    <!-- The loyalty page is Admin / SuperAdmin only (route guard), so the button is too. -->
+                    @if(canViewLoyalty){
+                      <a class="btn btn-outline-primary me-2" routerLink="/customer-loyalty" title="Loyalty points, tiers and customer activity">
+                        <i class="pi pi-star"></i> Customer Loyalty
+                      </a>
+                    }
+                    <button type="button" class="btn btn-primary" (click)="openModal(customerTemplate);setCustomerList('create',0);">+ Create customer</button>
                   </div>           
               </div>
               <div class="cnt">
@@ -106,10 +113,10 @@ import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
 
 
               <div class="col-md-6">
-                <label for="email" name="email" class="col-form-label">Email Id</label>
+                <label for="email" name="email" class="col-form-label">Email Id <small class="text-muted">(optional)</small></label>
                 <input type="text" value="" class="form-control" formControlName="email" />
                 <div *ngIf="customerForm.get('email')?.invalid && customerForm.get('email')?.touched">
-                  <small class="text-danger">Email id is required.</small>
+                  <small class="text-danger">Enter a valid email id, or leave it empty.</small>
                 </div>
               </div>
             </div>
@@ -138,6 +145,7 @@ export class CustomerComponent {
   // An outlet owner (SuperAdmin) sees every branch's records and picks the branch a new one is saved to;
   // everyone else only works with their own branch (the API enforces this).
   isOutletOwner = inject(AuthService).isOutletOwner();
+  canViewLoyalty = inject(AuthService).hasAnyRole(['Admin', 'SuperAdmin']);
   saveBranchId = Number(localStorage.getItem('branchid') || 1);
   branchLocked = false;
   customerList:any=[];  
@@ -164,7 +172,8 @@ export class CustomerComponent {
       customerid:[this.initialCustomerForm.customerid],
       name:[this.initialCustomerForm.name,Validators.required],
       contactnumber: [this.initialCustomerForm.contactnumber, [Validators.required, Validators.pattern(/^\d+$/)]],
-      email: [this.initialCustomerForm.email, [Validators.required, Validators.email]],
+      // Optional; checked only when something is typed.
+      email: [this.initialCustomerForm.email, [Validators.email]],
       address:[this.initialCustomerForm.address,Validators.required],
     })
   }

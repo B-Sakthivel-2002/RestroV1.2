@@ -47,7 +47,7 @@ import { BranchNamePipe } from '../shared/pipes/branch-name.pipe';
                           <td>{{fs.categoryid}}</td>
                           <td>{{fs.categoryname}}</td>
                            <td [ngClass]="fs.flag ? 'status-on' : 'status-off'">{{fs.flag ? 'On' : 'Off'}}</td>
-                           @if(hasExpressStall){<td [ngClass]="fs.expressstall ? 'status-on' : 'status-off'">{{fs.expressstall ? 'Yes' : 'No'}}</td>}
+                           @if(hasExpressStall){<td [ngClass]="fs.expressstall ? 'status-on' : 'status-off'">{{fs.expressstall ? 'On' : 'Off'}}</td>}
                           @if(isOutletOwner){<td>{{fs.branchid | branchName | async}}</td>}
                           <td class="custom-btn">  
                             <button type="button" class="btn btn-primary" (click)="setCategoiresDetail('edit',fs.categoryid);openModal(categoryTemplate);">

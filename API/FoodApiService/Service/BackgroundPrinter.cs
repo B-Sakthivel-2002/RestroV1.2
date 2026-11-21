@@ -9,7 +9,7 @@ namespace FoodApiService.Service;
 // fails, the user who sent it and the branch admins get a live "Printing failed" alert (OrderAlert).
 public class BackgroundPrinter : BackgroundService
 {
-    private record Request(bool Bill, int Id, int UserId, int? BranchId);
+    private record Request(bool Bill, int Id, int UserId, int? BranchId, bool Reprint = false);
 
     private readonly Channel<Request> _requests = Channel.CreateUnbounded<Request>(new UnboundedChannelOptions { SingleReader = true });
     private readonly IServiceScopeFactory _scopes;
@@ -25,7 +25,7 @@ public class BackgroundPrinter : BackgroundService
 
     public void QueueKot(int orderId, int userId, int? branchId) => _requests.Writer.TryWrite(new Request(false, orderId, userId, branchId));
 
-    public void QueueBill(int billId, int userId, int? branchId) => _requests.Writer.TryWrite(new Request(true, billId, userId, branchId));
+    public void QueueBill(int billId, int userId, int? branchId, bool reprint = false) => _requests.Writer.TryWrite(new Request(true, billId, userId, branchId, reprint));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -52,7 +52,7 @@ public class BackgroundPrinter : BackgroundService
         using var scope = _scopes.CreateScope();
         if (request.Bill)
         {
-            var job = await scope.ServiceProvider.GetRequiredService<BillPrintService>().QueueAsync(request.Id);
+            var job = await scope.ServiceProvider.GetRequiredService<BillPrintService>().QueueAsync(request.Id, request.Reprint);
             if (job != null)
                 _ = ReportAsync(request, new[] { job }, new[] { "Bill" });
         }

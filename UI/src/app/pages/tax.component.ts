@@ -114,7 +114,7 @@ import { debounceTime, finalize } from 'rxjs';
                 </label>
                   <!--
                 <label for="taxrangestatus" name="taxrangestatus" class="col-form-label">Range status</label>
-                <select id="taxrangestatus" formControlName="taxrangestatus">
+                <select id="taxrangestatus" formControlName="taxrangestatus" class="form-select">
                   <option value='true'>On</option>
                   <option value='false'>Off</option>
                 </select>
@@ -129,7 +129,7 @@ import { debounceTime, finalize } from 'rxjs';
                <div class="col-md-4">
                   <label for="taxtype" name="taxtype" class="col-form-label">Type</label>
                  
-                 <select id="taxtype" formControlName="taxtype" class="form-control">
+                 <select id="taxtype" formControlName="taxtype" class="form-select">
                   <option value="percentage" >Percentage (%)</option>
                   <option value="flat">Flat (₹)</option>
                 </select>

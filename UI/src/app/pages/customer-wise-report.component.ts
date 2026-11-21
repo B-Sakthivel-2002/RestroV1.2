@@ -46,6 +46,9 @@ import { finalize, map } from 'rxjs';
               <button class="btn btn-outline-secondary" title="Today" (click)="todayDate()">
                 <i class="pi pi-refresh"></i>
               </button>
+              <a class="btn btn-outline-primary" routerLink="/customer-loyalty" title="Loyalty points, tiers and customer activity">
+                <i class="pi pi-star"></i> Customer Loyalty
+              </a>
             </div>
           </div>
         </div>

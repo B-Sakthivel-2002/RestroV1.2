@@ -29,8 +29,8 @@ import { AlertService } from '@appservices/alert.service';
                     <thead>
                       <tr>                        
                          <th scope="col">Id</th>
-                        <th scope="col">Floor Id</th>
-                        <th scope="col">table Name</th>
+                        <th scope="col">Floor</th>
+                        <th scope="col">Table Name</th>
                         <th scope="col">Seats</th>
                         <th scope="col" >Description</th>
                         <th scope="col" >Status</th>                        
@@ -43,7 +43,7 @@ import { AlertService } from '@appservices/alert.service';
                       <tr>
                        
                            <td>{{fs.tableid}}</td>
-                          <td>{{fs.floorid}}</td>
+                          <td>{{ floorName(fs.floorid) }}</td>
                           <td>{{fs.tablename}}</td>
                           <td>{{fs.capacity}}</td>
                           <td>{{fs.description}}</td>
@@ -88,15 +88,13 @@ import { AlertService } from '@appservices/alert.service';
                 </div>
               </div>
               <div class="col-md-6">
-                    <label for="floorid" name="floorid" class="col-form-label"> Floor List</label> <br>
-                    <select formControlName="floorid">
-                      {{floorList | json}}
-                     @for(fl of floorList; track fl.floorid){
-                        <option [value]="fl.floorid">{{ fl.floorname }}</option>
-                      }
-                    </select>
+                <label for="floorid" class="col-form-label">Floor</label>
+                <select id="floorid" class="form-select" formControlName="floorid">
+                  @for(fl of floorList; track fl.floorid){
+                    <option [value]="fl.floorid">{{ fl.floorname }}</option>
+                  }
+                </select>
               </div>
-              
             </div>
             <div class="row mb-3">
               <div class="col-md-6">
@@ -106,16 +104,18 @@ import { AlertService } from '@appservices/alert.service';
                   <small class="text-danger">Seats must be between 1 and 50.</small>
                 </div>
               </div>
+              <div class="col-md-6">
+                <label class="col-form-label d-block">Status</label>
+                <div class="form-check form-switch tbl-status">
+                  <input id="tablestatus" class="form-check-input" type="checkbox" role="switch" formControlName="status" />
+                  <label class="form-check-label" for="tablestatus">{{ tableForm.get('status')?.value ? 'Active' : 'Inactive' }}</label>
+                </div>
+              </div>
             </div>
             <div class="row mb-3">
-              <div class="col-md-8">
-                <label for="description" name="description" class="col-form-label">Description</label>
-                <input type="text" value="" class="form-control" formControlName="description" />
-              </div>
-              <div class="col-md-4">
-                <label for="status" name="status" class="col-form-label">
-                   <input type="checkbox" value=""  formControlName="status" />
-                   Status</label>
+              <div class="col-12">
+                <label for="description" class="col-form-label">Description</label>
+                <input id="description" type="text" class="form-control" formControlName="description" />
               </div>
             </div>
             </form>
@@ -126,7 +126,12 @@ import { AlertService } from '@appservices/alert.service';
           </div>
      </ng-template>   
   `,
-  styles: ``
+  styles: `
+    /* Switch sits on the same baseline as the inputs beside it. */
+    .tbl-status { min-height: 38px; display: flex; align-items: center; gap: 8px; padding-left: 2.75em; margin: 0; }
+    .tbl-status .form-check-input { width: 2.4em; height: 1.25em; margin-top: 0; cursor: pointer; }
+    .tbl-status .form-check-label { cursor: pointer; }
+  `
 })
 export class TableComponent {
 
@@ -135,6 +140,13 @@ export class TableComponent {
   tableFormTitle:String ='Create';
   tableModalRef?: BsModalRef;
   floorList:any[] =[];
+
+  // Floor name for the list (floors are loaded once for the form's dropdown).
+  floorName(floorId: any): string {
+    const floor = (this.floorList || []).find((f: any) => f.floorid == floorId);
+    return floor?.floorname ?? (floorId != null ? 'Floor ' + floorId : '-');
+  }
+
   constructor(private alertService: AlertService,private modalService: BsModalService,private query:QueryService,private fb:FormBuilder,private cdref: ChangeDetectorRef,private stateService:StateService){
 
   }

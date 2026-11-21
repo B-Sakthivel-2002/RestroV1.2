@@ -7,6 +7,8 @@ public class HotelContext : DbContext
     public virtual DbSet<Billdetail> Billdetails { get; set; }
     public virtual DbSet<Billheader> Billheaders { get; set; }
     public virtual DbSet<Branch> Branches { get; set; }
+
+    public virtual DbSet<BranchSession> BranchSessions { get; set; }
     public virtual DbSet<Category> Categories { get; set; }
     public virtual DbSet<Choice> Choices { get; set; }
     public virtual DbSet<Customer> Customers { get; set; }
@@ -102,6 +104,15 @@ public class HotelContext : DbContext
             entity.Property(e => e.Reopenreason).HasMaxLength(250).HasColumnName("reopenreason");
             entity.Property(e => e.Reopenedby).HasColumnName("reopenedby");
             entity.Property(e => e.Reopenedat).HasColumnType("timestamp without time zone").HasColumnName("reopenedat");
+        });
+
+        modelBuilder.Entity<BranchSession>(entity =>
+        {
+            entity.HasKey(e => e.Branchid).HasName("branch_session_pkey");
+            entity.ToTable("branch_session");
+            entity.Property(e => e.Branchid).ValueGeneratedNever().HasColumnName("branchid");
+            entity.Property(e => e.Revokedat).HasColumnType("timestamp without time zone").HasColumnName("revokedat");
+            entity.Property(e => e.Revokedby).HasColumnName("revokedby");
         });
 
         modelBuilder.Entity<Branch>(entity =>

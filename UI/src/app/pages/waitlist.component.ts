@@ -198,9 +198,25 @@ import { BranchSelectComponent } from '../shared/component/branch-select.compone
         @if (selected.mergedinto) {
         } @else if (selected.openOrders > 0) {
           <p>{{ selected.openOrders }} open order(s), bill {{ selected.openAmount | number:'1.0-2' }}. The table frees itself when the bill is settled.</p>
+          @if (isAdmin) {
+            <div class="mb-3">
+              <button type="button" class="btn btn-success" disabled title="Settle or move the open orders first">
+                <i class="pi pi-check-circle"></i> Make available
+              </button>
+              <small class="text-muted d-block mt-1">Not possible while the table has open orders: settle the bill or transfer the orders first.</small>
+            </div>
+          }
         } @else if (selected.held) {
           <p>Held for <strong>{{ selected.held.tokencode }}</strong> {{ selected.held.customername }} ({{ selected.held.guests }} guests).
              Seat, move or cancel the token from the queue.</p>
+          @if (isAdmin) {
+            <div class="mb-3">
+              <button type="button" class="btn btn-success" [disabled]="freeing" (click)="makeAvailable()">
+                <i class="pi pi-check-circle"></i> {{ freeing ? 'Freeing...' : 'Make available' }}
+              </button>
+              <small class="text-muted d-block mt-1">Frees the table and marks {{ selected.held.tokencode }} as No-show.</small>
+            </div>
+          }
         } @else {
           <div class="d-flex flex-wrap gap-2 mb-3">
             @if (selected.storedState !== 'Available') {
@@ -326,6 +342,9 @@ export class WaitlistComponent implements OnInit, OnDestroy {
   history: any[] = [];
   historyLoading = false;
   modalRef?: BsModalRef;
+  // Admin / SuperAdmin may free a table that is stuck Reserved (token held) or show why it cannot be freed.
+  isAdmin = false;
+  freeing = false;
 
   private timer: any;
   private busy = false;
@@ -333,6 +352,7 @@ export class WaitlistComponent implements OnInit, OnDestroy {
   constructor(private query: QueryService, private alertService: AlertService, private modalService: BsModalService, auth: AuthService,
               private waitlistHub: WaitlistSignalrService, private hub: LiveHubService) {
     this.isOwner = auth.isOutletOwner();
+    this.isAdmin = auth.hasAnyRole(['Admin', 'SuperAdmin']);
   }
 
   ngOnInit(): void {
@@ -491,6 +511,34 @@ export class WaitlistComponent implements OnInit, OnDestroy {
         this.historyLoading = false;
       },
       error: () => this.historyLoading = false
+    });
+  }
+
+  // Admin: free a table held for a token (the token becomes No-show) or stuck in another state.
+  makeAvailable(): void {
+    const table = this.selected;
+    if (!table || this.freeing) {
+      return;
+    }
+    const token = table.held?.tokencode;
+    const question = token
+      ? `Make ${table.tablename} available? ${token} (${table.held.customername || 'guest'}) will be marked No-show.`
+      : `Make ${table.tablename} available?`;
+    if (!confirm(question)) {
+      return;
+    }
+    this.freeing = true;
+    this.query.freeTable(table.tableid).subscribe({
+      next: (res: any) => {
+        this.freeing = false;
+        this.modalRef?.hide();
+        this.refresh();
+        this.alertService.showAlert('Success', res?.message || `${table.tablename} is now Available`);
+      },
+      error: (err: any) => {
+        this.freeing = false;
+        this.alertService.showAlert('Error !', err?.error?.message || 'Could not free the table');
+      }
     });
   }
 

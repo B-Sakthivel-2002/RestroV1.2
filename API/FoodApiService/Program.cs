@@ -68,6 +68,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (!string.IsNullOrEmpty(accessToken) && context.HttpContext.Request.Path.StartsWithSegments("/kotHub"))
                     context.Token = accessToken;
                 return Task.CompletedTask;
+            },
+            // "Log out all devices" of a branch: its logins from before that moment are refused.
+            OnTokenValidated = async context =>
+            {
+                var sessions = context.HttpContext.RequestServices.GetRequiredService<SessionRevocation>();
+                if (await sessions.IsRevokedAsync(context.Principal))
+                    context.Fail("This login was ended by Log out all devices.");
             }
         };
     });
@@ -84,6 +91,7 @@ builder.Services.AddScoped<SeatingService>();
 builder.Services.AddScoped<KotPrintService>();
 builder.Services.AddSingleton<PrintQueue>();
 builder.Services.AddSingleton<LoginEncryption>();
+builder.Services.AddSingleton<SessionRevocation>();
 // KOT / bill printing off the request: CreateOrder and CreateBill only queue the ticket.
 builder.Services.AddScoped<BillPrintService>();
 builder.Services.AddSingleton<BackgroundPrinter>();
@@ -147,6 +155,8 @@ await SyncSchema.EnsureAsync(syncSettings, app.Services.GetRequiredService<ILogg
 // Any password still stored in plain text is hashed once, before the API takes requests.
 using (var scope = app.Services.CreateScope())
 {
+    // branch_session ("Log out all devices") on a database made before it existed.
+    await SessionRevocation.EnsureTableAsync(scope.ServiceProvider.GetRequiredService<HotelContext>());
     await PasswordSecurity.HashStoredPasswordsAsync(
         scope.ServiceProvider.GetRequiredService<HotelContext>(),
         scope.ServiceProvider.GetRequiredService<ILogger<Program>>());

@@ -19,8 +19,9 @@ import { AppSettings } from '../core/constants/Appsettings';
     <section class="td-page">
       <header class="td-top">
         <div>
-          <h1>{{ appName }}</h1>
-          <span class="td-branch">{{ branchName }}</span>
+          <!-- Like the app header: branch name as the heading, the app name under it -->
+          <h1>{{ branchName || appName }}</h1>
+          @if (branchName) { <span class="td-branch">{{ appName }}</span> }
         </div>
         <div class="td-clock">{{ now | date: 'h:mm a' }}</div>
       </header>

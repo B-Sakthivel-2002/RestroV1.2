@@ -123,7 +123,7 @@ import { debounceTime, finalize } from 'rxjs';
                  <div class="col-md-4">
                  
                 <label for="discounttype" name="discounttype" class="col-form-label" >Discount Type</label>
-                <select id="discounttype" formControlName="discounttype" class="form-control">
+                <select id="discounttype" formControlName="discounttype" class="form-select">
                    <option value="percentage" >Percentage (%)</option>
                   <option value="flat">Flat (₹)</option>
                 </select>

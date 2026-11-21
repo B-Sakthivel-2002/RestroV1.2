@@ -79,6 +79,10 @@ export class AuthService {
     localStorage.removeItem('orderHistroy');
   }
 
+  // Set while this device itself runs "Log out all devices", so it does not also show the
+  // "you were logged out by an admin" message meant for the other devices.
+  loggingOutAllDevices = false;
+
   clearRolesToken(): Observable<boolean> {
     this.roles = [];
 

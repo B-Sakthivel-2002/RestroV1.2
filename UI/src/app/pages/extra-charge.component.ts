@@ -130,7 +130,7 @@ status:boolean
                  <div class="col-md-4">
                  
                 <label for="extrachargetype" name="extrachargetype" class="col-form-label" >Extra Charge Type</label>
-                <select id="extrachargetype" formControlName="extrachargetype" class="form-control">
+                <select id="extrachargetype" formControlName="extrachargetype" class="form-select">
                    <option value="percentage" >Percentage (%)</option>
                   <option value="flat">Flat (₹)</option>
                 </select>
@@ -159,7 +159,7 @@ status:boolean
             <div class="row mb-3">
                 <div class="col-md-12">
                   <label for="ordertypeid" name="ordertypeid" class="col-form-label" >Order Type</label>
-                  <select id="ordertypeid" formControlName="ordertypeid" class="form-control">
+                  <select id="ordertypeid" formControlName="ordertypeid" class="form-select">
                     @for(list of orderTypeList; track  list.ordertypeid){
                       <option [value]="list.ordertypeid" >{{list.ordertypename}}</option>
                     }

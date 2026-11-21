@@ -19,7 +19,7 @@
 .kot-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px;
   border-bottom: 1px solid var(--app-border);
-  .no { font-size: 17px; font-weight: 800; }
+  .no { font-size: 14px; font-weight: 700; }
   .meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--app-muted);
     span { display: inline-flex; align-items: center; gap: 3px; } }
 }
@@ -39,7 +39,8 @@
   &.st-pending .st { color: var(--ion-color-warning); }
 }
 .act {
-  display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 10px; padding: 0 12px; height: 38px;
+  display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 10px; padding: 0 10px; height: 38px;
+  flex: 0 0 auto; white-space: nowrap;
   background: var(--ion-color-success); color: #fff; font-weight: 800; font-size: 13px;
   &.pick { background: var(--ion-color-primary); }
   &:active { transform: scale(.95); }

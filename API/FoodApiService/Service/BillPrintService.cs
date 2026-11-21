@@ -20,7 +20,8 @@ public class BillPrintService
 
     // Loads everything the bill needs and queues the ticket on the bill printer (same layout as before).
     // Returns the print job (null = bill not found); the job's result is null when printed, else the error.
-    public async Task<Task<string?>?> QueueAsync(int billId)
+    // reprint = printed again from a report: the same ticket as the settle print, plus a "** REPRINT **" line on top.
+    public async Task<Task<string?>?> QueueAsync(int billId, bool reprint = false)
     {
         var bill = await _context.Billheaders.AsNoTracking()
             .Include(x => x.Billdetails)
@@ -45,6 +46,21 @@ public class BillPrintService
                 .Select(x => x.Ordertypename)
                 .FirstOrDefault())
             .FirstOrDefaultAsync() ?? "TAKEAWAY";
+
+        // Home delivery (shared order type 3): the customer's name, phone and address go on the ticket.
+        // The bill's own values win; else the customer master.
+        bool isDelivery = bill.Billdetails.Any(d => d.Order?.Ordertypeid == 3);
+        string? custName = null, custPhone = null, custAddress = null;
+        if (isDelivery)
+        {
+            var customer = bill.Customerid is int cid
+                ? await _context.Customers.AsNoTracking().Where(c => c.Customerid == cid)
+                    .Select(c => new { c.Name, c.Contactnumber, c.Address }).FirstOrDefaultAsync()
+                : null;
+            custName = string.IsNullOrWhiteSpace(bill.Billname) ? customer?.Name : bill.Billname;
+            custPhone = string.IsNullOrWhiteSpace(bill.Phone) ? customer?.Contactnumber : bill.Phone;
+            custAddress = string.IsNullOrWhiteSpace(bill.Address) ? customer?.Address : bill.Address;
+        }
 
         // Table name (dine-in only; take-away / delivery bills have no table)
         int? tableId = bill.Billdetails.Select(d => d.Order?.Tableid).FirstOrDefault(t => t > 0);
@@ -96,6 +112,12 @@ public class BillPrintService
                 y += descSize.Height + 10f;
             }
 
+            if (reprint)
+            {
+                graphics.DrawString("** REPRINT **", boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
+                y += 15f;
+            }
+
             // Bill number
             string billNo = bill.Billnumber.Contains("-") ? bill.Billnumber.Split('-').Last() : bill.Billnumber;
             graphics.DrawString("*** Bill No - " + billNo + " ***", boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
@@ -114,6 +136,23 @@ public class BillPrintService
             {
                 graphics.DrawString("Table : " + tableName, boldFont, Brushes.Black, new RectangleF(left, y, width, 15f), centerFormat);
                 y += 15f;
+            }
+
+            // Delivery customer (address wraps over as many lines as it needs)
+            if (isDelivery && (!string.IsNullOrWhiteSpace(custName) || !string.IsNullOrWhiteSpace(custPhone) || !string.IsNullOrWhiteSpace(custAddress)))
+            {
+                void Line(string label, string? value, Font font)
+                {
+                    if (string.IsNullOrWhiteSpace(value)) return;
+                    string text = label + value.Trim();
+                    SizeF size = graphics.MeasureString(text, font, (int)width);
+                    graphics.DrawString(text, font, Brushes.Black, new RectangleF(left, y, width, size.Height));
+                    y += size.Height + 2f;
+                }
+                Line("Customer : ", custName, boldFont);
+                Line("Phone    : ", custPhone, boldFont);
+                Line("Address  : ", custAddress, normalFont);
+                y += 3f;
             }
 
             // Cashier

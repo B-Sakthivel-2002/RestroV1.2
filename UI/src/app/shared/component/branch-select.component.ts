@@ -15,7 +15,7 @@ import { QueryService } from '@appservices/query.service';
       <div class="row mb-3">
         <div class="col-md-6">
           <label for="saveBranch" class="col-form-label">Branch</label>
-          <select id="saveBranch" class="form-control" [ngModel]="branchId" (ngModelChange)="onChange($event)" [ngModelOptions]="{standalone: true}">
+          <select id="saveBranch" class="form-select" [ngModel]="branchId" (ngModelChange)="onChange($event)" [ngModelOptions]="{standalone: true}">
             @for (br of branches; track br.branchid) {
               <option [ngValue]="br.branchid">{{ br.branchname }}</option>
             }

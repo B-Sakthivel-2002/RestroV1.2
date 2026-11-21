@@ -170,7 +170,7 @@ import { AlertService } from '@appservices/alert.service';
                                       <label for="roleid" name="roleid" class="col-form-label">Role Type</label>                 
                                     <select id="roleid" formControlName="roleid" class="form-control">
                                        <option value="-1">Select</option>
-                                      @for(role  of roleList; track role.roleid){
+                                      @for(role  of visibleRoles(roleForm.get('roleid')?.value); track role.roleid){
                                          <option [value]="role.roleid" >{{role.rolename}}</option>
                                       }                                      
                                      
@@ -287,6 +287,16 @@ export class UsersComponent implements OnInit {
     // });
   }
 
+
+  // Roles in use: SuperAdmin, Admin, Chef, Captain. Others (Cashier, Manager, Waiter, Kitchen Staff) are hidden,
+  // except a user's current role, so editing such a user does not blank the dropdown.
+  private static readonly ROLES_IN_USE = ['superadmin', 'admin', 'chef', 'cheif', 'captain'];
+
+  visibleRoles(currentRoleId: any): any[] {
+    const norm = (n: any) => String(n || '').replace(/\s+/g, '').toLowerCase();
+    return (this.roleList || []).filter((r: any) =>
+      UsersComponent.ROLES_IN_USE.includes(norm(r.rolename)) || String(r.roleid) === String(currentRoleId));
+  }
 
   getRolesList(){
     this.query.getRoleList().subscribe({

@@ -4,15 +4,21 @@
 }
 .chips-bar { --min-height: 48px; }
 
+// Counts + colour hints, same swatches as the web Dine in header.
 .stats {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 14px 16px 4px;
-  .s { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; padding: 8px 6px; text-align: center; }
+  .s { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; padding: 8px 4px; text-align: center; }
   b { display: block; font-size: 20px; font-weight: 800; line-height: 1.1; }
-  span { font-size: 11px; color: var(--app-muted); font-weight: 600; }
-  .free b { color: var(--ion-color-success); }
-  .busy b { color: var(--ion-color-danger); }
-  .billed b { color: var(--ion-color-primary); }
-  .reserved b { color: var(--ion-color-warning); }
+  span { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--app-muted); font-weight: 600; white-space: nowrap; }
+  i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: 0 0 auto; }
+  .k-free b { color: var(--ion-color-success); }
+  .k-free i { background: var(--app-surface); border: 2px solid var(--ion-color-success); }
+  .k-kitchen b { color: var(--ion-color-danger); }
+  .k-kitchen i { background: var(--ion-color-danger); }
+  .k-billed b { color: var(--ion-color-success); }
+  .k-billed i { background: var(--ion-color-success); }
+  .k-merged b { color: var(--ion-color-danger); }
+  .k-merged i { background: var(--app-danger-soft); border: 2px solid var(--ion-color-danger); }
 }
 
 .grid {
@@ -32,9 +38,8 @@
   .sub { font-size: 11px; color: var(--app-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .amt { margin-top: auto; font-size: 15px; font-weight: 800; }
 
-  &.k-free { border-color: rgba(22, 163, 74, .35); .state { color: var(--ion-color-success); } }
-  &.k-kitchen, &.k-seated { background: var(--app-danger-soft); border-color: rgba(220, 38, 38, .35); .state { color: var(--ion-color-danger); } }
-  &.k-billed { background: var(--app-primary-soft); border-color: rgba(67, 97, 238, .4); .state { color: var(--ion-color-primary); } }
-  &.k-reserved { background: var(--app-warning-soft); border-color: rgba(217, 119, 6, .35); .state { color: var(--ion-color-warning); } }
-  &.k-blocked, &.k-merged { background: var(--app-surface-alt); border-style: dashed; .state { color: var(--app-muted); } }
+  // Same looks as the web Dine in tiles: white Available, red Order in Kitchen / Merged, green Ready for bill.
+  &.k-free { .state { color: var(--ion-color-success); } }
+  &.k-kitchen, &.k-merged { background: var(--app-danger-soft); border-color: rgba(220, 38, 38, .35); .state { color: var(--ion-color-danger); } }
+  &.k-billed { background: var(--app-success-soft); border-color: rgba(22, 163, 74, .4); .state { color: var(--ion-color-success); } }
 }

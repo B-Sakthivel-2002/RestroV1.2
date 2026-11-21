@@ -339,6 +339,52 @@ public class TablesController : ControllerBase
         public string? Notes { get; set; }
     }
 
+    // Admin "Make available": frees a table that is stuck Occupied / Reserved / Blocked.
+    // A table with open (unbilled) orders is refused: settle or move them first.
+    // A waitlist token held on the table (Called) is closed as No-show; a seated token leaves with the table.
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HttpPost("{id}/Free")]
+    public async Task<IActionResult> Free(int id)
+    {
+        var tenant = await _tenant.GetAsync();
+        var table = await _context.Tables.ForBranch(tenant).FirstOrDefaultAsync(t => t.Tableid == id);
+        if (table == null)
+            return NotFound(new { status = "Error", message = "Table not found", data = (object)null });
+        if (table.Mergedinto != null)
+            return BadRequest(new { status = "Error", message = "Table is merged with another table. Free the main table or unmerge it first." });
+        if (await _seating.HasOpenOrdersAsync(table.Tableid))
+        {
+            decimal amount = await _context.Orders
+                .Where(o => o.Tableid == table.Tableid && (o.Status == "submitted" || o.Status == "printed"))
+                .SumAsync(o => o.Totalprice) ?? 0m;
+            return BadRequest(new { status = "Error", message = $"{table.Tablename} has open orders ({amount:0.##}). Settle or move them first." });
+        }
+
+        // Tokens holding this table: No-show (frees any tables combined for them too).
+        var held = await _context.WaitlistTokens
+            .Where(w => w.Tableid == table.Tableid && w.Status == TokenStatus.Called)
+            .ToListAsync();
+        foreach (var token in held)
+        {
+            _seating.AddHistory(table.Tableid, token.Branchid, token.Outletid, TableEvents.TokenReleased, tenant.UserId,
+                tokenId: token.Tokenid, notes: $"{token.Tokencode} {TokenStatus.NoShow} (table freed by admin)");
+            await _seating.CombineAsync(token, null, new TablePlan(table, new List<Table>()), TableStates.Available, tenant.UserId);
+            token.Status = TokenStatus.NoShow;
+            token.Closedat = DateTime.Now;
+            token.Updatedby = tenant.UserId;
+        }
+
+        string before = table.Tablestate ?? "";
+        _seating.SetState(table, TableStates.Available, tenant.UserId, notes: "Made available by admin");
+        await _seating.ReleaseMergedAsync(table, TableStates.Available, tenant.UserId);
+        await _context.SaveChangesAsync();
+
+        await _seating.AutoAssignAsync(table.Branchid!.Value, tenant.UserId);
+        await _seating.NotifyAsync(table.Branchid);
+        string tokens = held.Count > 0 ? $" {string.Join(", ", held.Select(t => t.Tokencode))} marked No-show." : "";
+        return Ok(new { status = "Success", message = $"{table.Tablename} is now Available.{tokens}", data = new { table.Tableid, table.Tablestate, before } });
+    }
+
     // Captain sets a table Available, Blocked or Reserved.
     [HttpPost("{id}/State")]
     public async Task<IActionResult> SetState(int id, [FromBody] TableStateRequest request)

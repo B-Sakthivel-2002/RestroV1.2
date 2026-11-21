@@ -5,6 +5,7 @@ import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { AuthService } from '@appservices/auth.service';
 import { ThemeService } from '@appservices/theme.service';
+import { LiveHubService } from '@appservices/live-hub.service';
 import { AppSettings, isExpressStallType } from '../core/constants/Appsettings';
 import { OrderAlertsComponent } from '../shared/component/order-alerts.component';
 
@@ -187,12 +188,14 @@ export class HeaderComponent implements OnInit, OnDestroy {
   today = new Date();
   greeting = '';
   private navSub?: Subscription;
+  private forceLogoutSub?: Subscription;
 
   constructor(
     private queryService: QueryService,
     private auth: AuthService,
     private router: Router,
-    public theme: ThemeService
+    public theme: ThemeService,
+    private hub: LiveHubService
   ) {}
 
   ngOnInit(): void {
@@ -208,10 +211,20 @@ export class HeaderComponent implements OnInit, OnDestroy {
       if (this.flyout) this.openGroup = '';
       this.updateActiveGroup();
     });
+
+    // An admin used "Log out all devices" for this branch: leave at once (the API refuses this login now).
+    this.forceLogoutSub = this.hub.on('ForceLogout').subscribe(() => {
+      if (this.auth.loggingOutAllDevices) return; // this device started it; the Profile page handles it
+      this.auth.clearRolesToken().subscribe(() => {
+        this.router.navigate(['/']).then(() =>
+          setTimeout(() => alert('You have been logged out: an admin logged out all devices of this branch. Please log in again.')));
+      });
+    });
   }
 
   ngOnDestroy(): void {
     this.navSub?.unsubscribe();
+    this.forceLogoutSub?.unsubscribe();
   }
 
   // Sidebar groups open as an accordion; on the icon rail (or a collapsed sidebar) as a flyout

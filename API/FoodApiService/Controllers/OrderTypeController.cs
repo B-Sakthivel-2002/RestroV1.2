@@ -14,8 +14,9 @@ public class OrderTypeController : ControllerBase
 {
     private readonly HotelContext _context;
     private readonly ITenantContext _tenant;
+    private readonly BillCalculator _calc;
 
-    public OrderTypeController(HotelContext context, ITenantContext tenant) { _context = context; _tenant = tenant; }
+    public OrderTypeController(HotelContext context, ITenantContext tenant, BillCalculator calc) { _context = context; _tenant = tenant; _calc = calc; }
 
     [HttpGet]
     public async Task<IActionResult> GetOrderTypes()
@@ -32,7 +33,13 @@ public class OrderTypeController : ControllerBase
         if (stallBranches.Count == 0)
             types = types.Where(t => !ExpressStall.IsOrderType(t.Ordertypename)).ToList();
 
-        return Ok(new { status = "Success", message = "Order types fetched successfully", data = types, expressStall = stallBranches.Contains(tenant.BranchId) });
+        // expressStallNoTax (appsettings BillingSettings:ExpressStallNoTax): the order screen's estimate skips tax for stall orders, like the API.
+        return Ok(new
+        {
+            status = "Success", message = "Order types fetched successfully", data = types,
+            expressStall = stallBranches.Contains(tenant.BranchId),
+            expressStallNoTax = _calc.Settings.ExpressStallNoTax
+        });
     }
 
     [HttpGet("{id}")]

@@ -362,7 +362,9 @@ public class BillController : ControllerBase
             o.Status = "cancelled";
 
         bill.Lifecyclestatus = BillLifecycle.Cancelled;
-        bill.Status = "cancelled";
+        // Payment status: a cancelled bill is unpaid. "Cancelled" lives in Lifecyclestatus only,
+        // and every total skips it by lifecycle, so it is not counted as unpaid money.
+        bill.Status = "unpaid";
         bill.Cancelreason = request!.Reason!.Trim();
         bill.Cancelledby = tenant.UserId;
         bill.Cancelledat = DateTime.Now;
@@ -691,6 +693,113 @@ public class BillController : ControllerBase
         return Ok(new { status = "Success", message = "Bill deleted successfully!" });
     }
 
+    // Shared order type 3 = Home Delivery (see OrderTypeController).
+    private const int HomeDeliveryOrderTypeId = 3;
+
+    // Home delivery bills of a period with the customer's name / phone / address, for the delivery
+    // report page. The address saved on the bill wins; else the customer master's address.
+    [Authorize(Roles = "Admin,SuperAdmin,Captain")]
+    [HttpGet("HomeDeliveryBills")]
+    public async Task<IActionResult> GetHomeDeliveryBills(DateTime? fromDate, DateTime? toDate, int? branchId = null)
+    {
+        var tenant = await _tenant.GetAsync();
+        var query = _context.Billheaders.AsNoTracking().ForBranch(tenant, branchId)
+            .Where(b => b.Billdetails.Any(d => d.Order.Ordertypeid == HomeDeliveryOrderTypeId));
+        if (fromDate.HasValue)
+            query = query.Where(b => b.Businessdate.Value.Date >= fromDate.Value.Date);
+        if (toDate.HasValue)
+            query = query.Where(b => b.Businessdate.Value.Date <= toDate.Value.Date);
+
+        var bills = await query
+            .OrderByDescending(b => b.Datetime).ThenByDescending(b => b.Billid)
+            .Select(b => new
+            {
+                b.Billid, b.Billnumber, b.Billname, b.Phone, b.Address, b.Customerid, b.Notes, b.Datetime, b.Businessdate,
+                b.Subtotal, b.Tax, b.Discount, b.Extraamount, b.Totalamount, b.Paidamount, b.Paymentmode,
+                b.Status, b.Lifecyclestatus, b.Iscomplementary, b.Branchid,
+                OrderIds = b.Billdetails.Select(d => d.Orderid).ToList()
+            })
+            .ToListAsync();
+
+        var customerIds = bills.Where(b => b.Customerid != null).Select(b => b.Customerid!.Value).Distinct().ToList();
+        var customers = await _context.Customers.AsNoTracking().Where(c => customerIds.Contains(c.Customerid))
+            .ToDictionaryAsync(c => c.Customerid, c => new { c.Name, c.Contactnumber, c.Address });
+        var branchIdsUsed = bills.Select(b => b.Branchid).Distinct().ToList();
+        var branchNames = await _context.Branches.AsNoTracking().Where(br => branchIdsUsed.Contains((int?)br.Branchid))
+            .ToDictionaryAsync(br => br.Branchid, br => br.Branchname);
+
+        // Items of each bill (summed per item, like the printed ticket), for the delivery cards.
+        var orderIdsUsed = bills.SelectMany(b => b.OrderIds).Distinct().ToList();
+        var lines = await _context.Orderdetails.AsNoTracking()
+            .Where(od => orderIdsUsed.Contains(od.Orderid) && od.Qty > 0)
+            .Select(od => new { od.Orderid, od.Itemid, od.Qty, od.Sumofprice })
+            .ToListAsync();
+        var itemIdsUsed = lines.Select(l => l.Itemid).Distinct().ToList();
+        var itemNames = await _context.Items.AsNoTracking().Where(i => itemIdsUsed.Contains(i.Itemid))
+            .ToDictionaryAsync(i => i.Itemid, i => i.Itemname);
+        var linesByOrder = lines.ToLookup(l => l.Orderid);
+
+        static string? Pick(string? first, string? second) => string.IsNullOrWhiteSpace(first) ? second : first;
+        var data = bills.Select(b =>
+        {
+            var c = b.Customerid is int cid ? customers.GetValueOrDefault(cid) : null;
+            return new
+            {
+                b.Billid, b.Billnumber, b.Datetime, b.Businessdate, b.Notes,
+                customerName = Pick(b.Billname, c?.Name),
+                phone = Pick(b.Phone, c?.Contactnumber),
+                address = Pick(b.Address, c?.Address),
+                b.Subtotal, b.Tax, b.Discount, b.Extraamount, b.Totalamount, b.Paidamount, b.Paymentmode,
+                b.Status, b.Lifecyclestatus, b.Iscomplementary,
+                branch = b.Branchid is int bid ? branchNames.GetValueOrDefault(bid) : null,
+                b.OrderIds,
+                items = b.OrderIds.SelectMany(oid => linesByOrder[oid])
+                    .GroupBy(l => l.Itemid)
+                    .Select(g => new
+                    {
+                        itemId = g.Key,
+                        itemName = itemNames.GetValueOrDefault(g.Key) ?? "Unknown Item",
+                        qty = g.Sum(x => x.Qty),
+                        amount = g.Sum(x => x.Sumofprice.GetValueOrDefault())
+                    })
+                    .ToList(),
+                // Bills that were printed or settled can be printed again; open / cancelled ones cannot.
+                canReprint = b.Lifecyclestatus != BillLifecycle.Cancelled && b.Lifecyclestatus != BillLifecycle.Reopened
+            };
+        }).ToList();
+
+        var counted = data.Where(b => b.Lifecyclestatus != BillLifecycle.Cancelled).ToList();
+        return Ok(new
+        {
+            status = "Success",
+            count = counted.Count,
+            totalAmount = counted.Sum(b => b.Totalamount.GetValueOrDefault()),
+            data
+        });
+    }
+
+    // Prints a bill again on the bill printer (in the background, like the first print).
+    // Same ticket as the settle print (BillPrintService), plus a "** REPRINT **" line on top.
+    [Authorize(Roles = "Admin,SuperAdmin,Captain")]
+    [HttpPost("{id}/Reprint")]
+    public async Task<IActionResult> ReprintBill(int id)
+    {
+        var tenant = await _tenant.GetAsync();
+        var bill = await _context.Billheaders.AsNoTracking().ForBranch(tenant)
+            .Where(b => b.Billid == id)
+            .Select(b => new { b.Billid, b.Billnumber, b.Branchid, b.Lifecyclestatus })
+            .FirstOrDefaultAsync();
+        if (bill == null)
+            return NotFound(new { status = "Error", message = "Bill not found" });
+        if (bill.Lifecyclestatus == BillLifecycle.Cancelled)
+            return BadRequest(new { status = "Error", message = "A cancelled bill cannot be printed" });
+        if (bill.Lifecyclestatus == BillLifecycle.Reopened)
+            return BadRequest(new { status = "Error", message = "This bill is open for editing. Settle it first." });
+
+        _printer.QueueBill(bill.Billid, tenant.UserId, bill.Branchid, reprint: true);
+        return Ok(new { status = "Success", message = $"Bill {bill.Billnumber} sent to the printer" });
+    }
+
     [Authorize(Roles = "Admin,SuperAdmin,Captain")]
     [HttpGet("GetBillOrderReport")]
     public async Task<IActionResult> GetBillOrderReport(DateTime? fromDate, DateTime? toDate, string? status, string? orderType, int? branchId = null)
@@ -851,7 +960,10 @@ public class BillController : ControllerBase
                 OrderAmount = o.Totalprice.GetValueOrDefault(),
                 BillSubtotal = b.Subtotal.GetValueOrDefault(),
                 BillTax = b.Tax.GetValueOrDefault(),
-                BillTotal = b.Subtotal.GetValueOrDefault() + b.Tax.GetValueOrDefault(),
+                BillDiscount = b.Discount.GetValueOrDefault(),
+                BillExtra = b.Extraamount.GetValueOrDefault(),
+                // The settled total: subtotal + tax - discount + extra charges, rounded (BillCalculator).
+                BillTotal = b.Totalamount.GetValueOrDefault(),
                 b.Billid,
                 b.Status,
                 b.Iscomplementary
@@ -864,6 +976,8 @@ public class BillController : ControllerBase
                 OrderCount = g.Count(),
                 SubTotalAmount = g.Select(x => x.Billid).Distinct().Sum(id => g.First(x => x.Billid == id).BillSubtotal),
                 TotalTax = g.Select(x => x.Billid).Distinct().Sum(id => g.First(x => x.Billid == id).BillTax),
+                TotalDiscount = g.Select(x => x.Billid).Distinct().Sum(id => g.First(x => x.Billid == id).BillDiscount),
+                TotalExtraCharges = g.Select(x => x.Billid).Distinct().Sum(id => g.First(x => x.Billid == id).BillExtra),
                 TotalWithTax = g.Select(x => x.Billid).Distinct().Sum(id => g.First(x => x.Billid == id).BillTotal),
                 PaidAmount = g.Where(x => x.Status == "paid" && !x.Iscomplementary.GetValueOrDefault())
                     .Select(x => x.Billid).Distinct()

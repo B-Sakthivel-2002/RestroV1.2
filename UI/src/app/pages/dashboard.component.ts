@@ -142,6 +142,7 @@ export class DashboardComponent implements OnInit {
     { url: '/order-report', label: 'Order Report', hint: 'Orders by type and status', icon: 'pi-receipt', tone: 'var(--rp-tone-3)' },
     { url: '/captain-wise-report', label: 'Captain Wise Report', hint: 'Sales per captain', icon: 'pi-users', tone: 'var(--rp-tone-4)' },
     { url: '/customer-wise-report', label: 'Customer Wise Report', hint: 'Sales per customer', icon: 'pi-user', tone: 'var(--rp-tone-1)' },
+    { url: '/home-delivery-report', label: 'Home Delivery Report', hint: 'Delivery bills with address, reprint', icon: 'pi-truck', tone: 'var(--rp-tone-2)' },
     { url: '/payment-mode-wise-report', label: 'Payment Mode Wise Report', hint: 'Cash, card and UPI split', icon: 'pi-credit-card', tone: 'var(--rp-tone-2)' },
     { url: '/tax-wise-report', label: 'Tax Wise Report', hint: 'Tax collected by rate', icon: 'pi-percentage', tone: 'var(--rp-tone-3)' },
     { url: '/complementary-report', label: 'Complementary Report', hint: 'Complimentary bills', icon: 'pi-gift', tone: 'var(--rp-tone-4)' }

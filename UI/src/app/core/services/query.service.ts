@@ -136,6 +136,11 @@ private branchDirectory$:any;
     return forge.util.encode64(encrypted);
   }
 
+  // Settings > Profile (Admin / SuperAdmin): ends every login of the branch, this one included.
+  logoutAllDevices(branchId?: number): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Sessions/LogoutAll', { branchId: branchId ?? null });
+  }
+
   getCategories(allBranches: boolean = false):Observable<any>{
    return this.http.get(this.withScope('Categories', allBranches)).pipe(
       tap((res:any)=>{
@@ -462,7 +467,17 @@ private branchDirectory$:any;
   }
 
 
-    getCustomerWiseReport(paramObj:any):Observable<any>{     
+  // Home delivery bills of a period with the customer's name, phone and address.
+  getHomeDeliveryBills(fromDate: string, toDate: string): Observable<any> {
+    return this.http.get(AppSettings.apiUrl + 'Bill/HomeDeliveryBills', { params: { fromDate, toDate } });
+  }
+
+  // Prints a bill again on the bill printer (same ticket as settle, marked REPRINT).
+  reprintBill(billId: number): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Bill/' + billId + '/Reprint', {});
+  }
+
+    getCustomerWiseReport(paramObj:any):Observable<any>{
       return this.http.get(AppSettings.apiUrl+'Bill/GetCustomerWiseReport',{params:{
         fromDate: paramObj.fromDate.toString(),
         toDate: paramObj.toDate.toString()
@@ -1217,6 +1232,11 @@ private branchDirectory$:any;
   }
 
   // state: Available | Blocked | Reserved
+  // Admin / SuperAdmin: free a stuck table (a token held on it becomes No-show; refused while orders are open).
+  freeTable(tableId: number): Observable<any> {
+    return this.http.post(AppSettings.apiUrl + 'Tables/' + tableId + '/Free', {});
+  }
+
   setTableState(tableId: number, state: string, notes?: string): Observable<any> {
     return this.http.post(AppSettings.apiUrl + 'Tables/' + tableId + '/State', { state, notes });
   }

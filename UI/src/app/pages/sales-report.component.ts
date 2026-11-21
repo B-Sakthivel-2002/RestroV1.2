@@ -116,7 +116,7 @@ export interface itemWiseOrder {
                   <div class="grd-cnt">
                     <span>Total</span>
                     <h2>{{ getTotalWithTax() | number: '1.2-2' }}</h2>
-                    <div class="sm-cnt">
+                    <div class="sm-cnt amt-grid">
                       <div>
                         <span class="sb-tt">Sub Total</span>
                         <h4 class="mn-tt">
@@ -127,6 +127,18 @@ export interface itemWiseOrder {
                         <span class="sb-tt">Tax</span>
                         <h4 class="mn-tt">
                           {{ getTotalTax() | number: '1.2-2' }}
+                        </h4>
+                      </div>
+                      <div>
+                        <span class="sb-tt">Discount</span>
+                        <h4 class="mn-tt">
+                          {{ getTotalDiscount() | number: '1.2-2' }}
+                        </h4>
+                      </div>
+                      <div>
+                        <span class="sb-tt">Extra Charges</span>
+                        <h4 class="mn-tt">
+                          {{ getTotalExtraCharges() | number: '1.2-2' }}
                         </h4>
                       </div>
                     </div>
@@ -142,7 +154,7 @@ export interface itemWiseOrder {
                             : 0.0
                         }}
                       </h2>
-                      <div class="sm-cnt">
+                      <div class="sm-cnt amt-grid">
                         <div>
                           <span class="sb-tt">Sub Total</span>
                           <h4 class="mn-tt">
@@ -153,6 +165,18 @@ export interface itemWiseOrder {
                           <span class="sb-tt">Tax</span>
                           <h4 class="mn-tt">
                             {{ bl.totalTax | number: '1.2-2' }}
+                          </h4>
+                        </div>
+                        <div>
+                          <span class="sb-tt">Discount</span>
+                          <h4 class="mn-tt">
+                            {{ bl.totalDiscount | number: '1.2-2' }}
+                          </h4>
+                        </div>
+                        <div>
+                          <span class="sb-tt">Extra Charges</span>
+                          <h4 class="mn-tt">
+                            {{ bl.totalExtraCharges | number: '1.2-2' }}
                           </h4>
                         </div>
                       </div>
@@ -234,6 +258,24 @@ export interface itemWiseOrder {
                     aria-selected="false"
                   >
                     Item Wise
+                  </button>
+                </li>
+
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    id="cancelled-tab"
+                    data-bs-toggle="pill"
+                    data-bs-target="#cancelled-bills"
+                    type="button"
+                    role="tab"
+                    aria-controls="cancelled-bills"
+                    aria-selected="false"
+                  >
+                    Cancelled Bills
+                    @if (cancelledBills.length) {
+                      <span class="badge bg-danger ms-1">{{ cancelledBills.length }}</span>
+                    }
                   </button>
                 </li>
                 <li>
@@ -320,6 +362,7 @@ export interface itemWiseOrder {
                     <table class="table custom-table" id="billSummaryTable">
                       <thead>
                         <tr>
+                          <th class="no-export">Action</th>
                           <th>Bill Id</th>
                           <th>Bill Number</th>
                           <th>Business Date</th>
@@ -333,7 +376,6 @@ export interface itemWiseOrder {
                           <th>Order Type</th>
                           <th>Order Ids</th>
                           <th>Branch</th>
-                          <th style="width:200px;">Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -343,22 +385,17 @@ export interface itemWiseOrder {
                           let blIndex = $index
                         ) {
                           <tr>
-                            <td>{{ bl.billid }}</td>
-                            <td>{{ bl.billnumber }}</td>
-                            <!-- <td>{{bl.datetime	 | date: 'dd-MM-yyyy'}}</td> -->
-                            <td>{{ bl.businessdate | date: 'dd-MM-yyyy' }}</td>
-                            <td>{{ bl.subtotal }}</td>
-                            <td>{{ bl.tax }}</td>
-                            <td>{{ bl.discount }}</td>
-                            <td>{{ bl.extraamount }}</td>
-                            <td>{{ bl.totalamount }}</td>
-                            <td class="txt-camel" [title]="billAuditText(bl)">{{ bl.lifecyclestatus }}</td>
-                            <td>{{ bl.status }}</td>
-                            <td>{{ bl.orders[0].orderType }}</td>
-                            <td>{{ getOrderIds(bl.orders) }}</td>
-                            <td>{{ bl.branch }}</td>
+                            <!-- Actions first, in one row -->
+                            <td class="no-export">
+                              <div class="bill-actions">
+                              <button
+                                class="btn btn-outline-secondary" title="Print this bill again (marked REPRINT)"
+                                [disabled]="printingBillId === bl.billid || bl.lifecyclestatus === 'reopened'"
+                                (click)="reprintBill(bl)"
+                              >
+                                <i class="pi pi-print"></i>
+                              </button>
 
-                            <td>
                               <button
                                 class="btn btn-primary" title="Update settlement"
                                 (click)="
@@ -401,15 +438,25 @@ export interface itemWiseOrder {
                               >
                                 <i class="pi pi-list-check"></i>
                               </button>
+                              </div>
                             </td>
-                            <!-- <td>
-                                        <button class="btn btn-primary">
-                                          <i class="pi pi-file-o"></i>
-                                      </button></td> -->
+                            <td>{{ bl.billid }}</td>
+                            <td>{{ bl.billnumber }}</td>
+                            <td>{{ bl.businessdate | date: 'dd-MM-yyyy' }}</td>
+                            <td>{{ bl.subtotal }}</td>
+                            <td>{{ bl.tax }}</td>
+                            <td>{{ bl.discount }}</td>
+                            <td>{{ bl.extraamount }}</td>
+                            <td>{{ bl.totalamount }}</td>
+                            <td class="txt-camel" [title]="billAuditText(bl)">{{ bl.lifecyclestatus }}</td>
+                            <td>{{ bl.status }}</td>
+                            <td>{{ bl.orders[0].orderType }}</td>
+                            <td>{{ getOrderIds(bl.orders) }}</td>
+                            <td>{{ bl.branch }}</td>
                           </tr>
                         } @empty {
                           <tr>
-                            <td colspan="12" class="text-center">
+                            <td colspan="14" class="text-center">
                               No data found
                             </td>
                           </tr>
@@ -491,7 +538,9 @@ export interface itemWiseOrder {
                         <th>Name</th>
                         <th>Sub Total</th>
                         <th>Tax</th>
-                        <th>Total (with tax)</th>
+                        <th>Discount</th>
+                        <th>Extra Charges</th>
+                        <th>Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -501,11 +550,13 @@ export interface itemWiseOrder {
                           <td>{{ bl.ordertype }}</td>
                           <td>{{ bl.subTotalAmount | number: '1.2-2' }}</td>
                           <td>{{ bl.totalTax | number: '1.2-2' }}</td>
+                          <td>{{ bl.totalDiscount | number: '1.2-2' }}</td>
+                          <td>{{ bl.totalExtraCharges | number: '1.2-2' }}</td>
                           <td>{{ bl.totalWithTax | number: '1.2-2' }}</td>
                         </tr>
                       } @empty {
                         <tr>
-                          <td colspan="4">No data found</td>
+                          <td colspan="6">No data found</td>
                         </tr>
                       }
 
@@ -519,6 +570,12 @@ export interface itemWiseOrder {
                           {{ getTotalTax() | number: '1.2-2' }}
                         </td>
                         <td class="txt-blue">
+                          {{ getTotalDiscount() | number: '1.2-2' }}
+                        </td>
+                        <td class="txt-blue">
+                          {{ getTotalExtraCharges() | number: '1.2-2' }}
+                        </td>
+                        <td class="txt-blue">
                           <b>{{ getTotalWithTax() | number: '1.2-2' }}</b>
                         </td>
                       </tr>
@@ -527,7 +584,7 @@ export interface itemWiseOrder {
                       @if (getUnpaidTotal() > 0) {
                         <tr class="bg-black">
                           <td>Unpaid</td>
-                          <td colspan="3">
+                          <td colspan="5">
                             {{ getUnpaidTotal() | number: '1.2-2' }}
                           </td>
                         </tr>
@@ -537,7 +594,7 @@ export interface itemWiseOrder {
                       @if (getPaidTotal() > 0) {
                         <tr class="bg-green">
                           <td>Paid</td>
-                          <td colspan="3">
+                          <td colspan="5">
                             {{ getPaidTotal() | number: '1.2-2' }}
                           </td>
                         </tr>
@@ -547,7 +604,7 @@ export interface itemWiseOrder {
                       @if (getComplementaryTotal() > 0) {
                         <tr class="bg-grey">
                           <td>Complementary</td>
-                          <td colspan="3">
+                          <td colspan="5">
                             {{ getComplementaryTotal() | number: '1.2-2' }}
                           </td>
                         </tr>
@@ -596,6 +653,64 @@ export interface itemWiseOrder {
                             <tr>
                               <td>{{ item.itemName }}</td>
                               <td>{{ item.qty }}</td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Cancelled bills: listed for audit only, never counted in the totals above. -->
+                <div
+                  class="tab-pane fade"
+                  id="cancelled-bills"
+                  role="tabpanel"
+                  aria-labelledby="cancelled-tab"
+                >
+                  <div class="custom-table-bg">
+                    <h3 class="cs-mn-tt">Cancelled Bills</h3>
+                    <div class="table-responsive">
+                      <table class="table custom-table" id="cancelledBillsTable">
+                        <thead>
+                          <tr>
+                            <th>Bill Id</th>
+                            <th>Bill Number</th>
+                            <th>Business Date</th>
+                            <th>Sub Total Amount</th>
+                            <th>Tax</th>
+                            <th>Discount</th>
+                            <th>Extra Charges</th>
+                            <th>Total Amount</th>
+                            <th>Order Type</th>
+                            <th>Order Ids</th>
+                            <th>Branch</th>
+                            <th>Cancelled By</th>
+                            <th>Cancelled At</th>
+                            <th>Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (bl of cancelledBills; track bl.billid) {
+                            <tr>
+                              <td>{{ bl.billid }}</td>
+                              <td>{{ bl.billnumber }}</td>
+                              <td>{{ bl.businessdate | date: 'dd-MM-yyyy' }}</td>
+                              <td>{{ bl.subtotal }}</td>
+                              <td>{{ bl.tax }}</td>
+                              <td>{{ bl.discount }}</td>
+                              <td>{{ bl.extraamount }}</td>
+                              <td>{{ bl.totalamount }}</td>
+                              <td>{{ bl.orders?.[0]?.orderType }}</td>
+                              <td>{{ getOrderIds(bl.orders) }}</td>
+                              <td>{{ bl.branch }}</td>
+                              <td>{{ bl.cancelledby || '-' }}</td>
+                              <td>{{ bl.cancelledat | date: 'dd-MM-yyyy hh:mm a' }}</td>
+                              <td>{{ bl.cancelreason }}</td>
+                            </tr>
+                          } @empty {
+                            <tr>
+                              <td colspan="14" class="text-center">No cancelled bills</td>
                             </tr>
                           }
                         </tbody>
@@ -873,11 +988,17 @@ export interface itemWiseOrder {
       </div>
     </ng-template>
   `,
-  styles: ``
+  styles: `
+    /* Bill row actions: one row, no wrapping */
+    .bill-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+    .bill-actions .btn { margin: 0; flex: 0 0 auto; }
+  `
 })
 export class SalesReportComponent {
 orderlist: any;
   orderListSource: Array<any> = [];
+  cancelledBills: Array<any> = [];
+  printingBillId: number | null = null;
   orderTypeWise: Array<any> = [];
   totalEarnings: any = {
     totalAmount: '',
@@ -1166,11 +1287,15 @@ orderlist: any;
         next: (res: any) => {
           this.totalEarnings.totalAmount = res.totalAmount;
           this.totalEarnings.subTotal = res.subtotal;
-          this.orderlist = res.data;
+          // Cancelled bills get their own tab; the Bills tab lists the rest.
+          const allBills: any[] = res.data || [];
+          this.cancelledBills = allBills.filter((b: any) => b.lifecyclestatus === 'cancelled');
+          const activeBills = allBills.filter((b: any) => b.lifecyclestatus !== 'cancelled');
+          this.orderlist = activeBills;
           this.itemWiseOrders = res.itemWiseOrders || [];
-          console.log(res.data, '---order-detail--->');
           // this.orderDetail =
-          this.orderListSource = res.data;
+          this.orderListSource = activeBills;
+          this.currentPage = 1;
           this.orderTypeWise = res.orderTypeWiseTotals;
 
           this.updatePagination();        
@@ -1192,6 +1317,20 @@ orderlist: any;
   getTotalTax() {
     return (this.orderTypeWise ?? []).reduce(
       (acc, x) => acc + (x.totalTax || 0),
+      0,
+    );
+  }
+
+  getTotalDiscount() {
+    return (this.orderTypeWise ?? []).reduce(
+      (acc, x) => acc + (x.totalDiscount || 0),
+      0,
+    );
+  }
+
+  getTotalExtraCharges() {
+    return (this.orderTypeWise ?? []).reduce(
+      (acc, x) => acc + (x.totalExtraCharges || 0),
       0,
     );
   }
@@ -1339,8 +1478,25 @@ sendOwnerReport() {
   });
 }
 
+// Prints the bill again on the bill printer: the same ticket as at settle, marked REPRINT.
+reprintBill(bl: any) {
+  this.printingBillId = bl.billid;
+  this.query.reprintBill(bl.billid).subscribe({
+    next: (res: any) => {
+      this.printingBillId = null;
+      this.alertService.showAlert('Success', res?.message || `Bill ${bl.billnumber} sent to the printer`);
+    },
+    error: (err: any) => {
+      this.printingBillId = null;
+      this.alertService.showAlert('Error', err?.error?.message || 'Could not print the bill');
+    },
+  });
+}
+
 exportToExcel() {
-  const table = document.getElementById('billSummaryTable');
+  // The Action column (buttons) is left out of the sheet.
+  const table = document.getElementById('billSummaryTable')?.cloneNode(true) as HTMLElement;
+  table?.querySelectorAll('.no-export').forEach(el => el.remove());
 
   const worksheet = XLSX.utils.table_to_sheet(table);
   const workbook = XLSX.utils.book_new();
@@ -1350,6 +1506,11 @@ exportToExcel() {
     worksheet,
     'Sales Report'
   );
+
+  if (this.cancelledBills.length) {
+    const cancelled = document.getElementById('cancelledBillsTable');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.table_to_sheet(cancelled), 'Cancelled Bills');
+  }
 
   XLSX.writeFile(workbook, 'SalesReport.xlsx');
 }

@@ -9,6 +9,10 @@ public class BillingSettings
 {
     // true = item prices include tax (tax is taken out of the price), false = tax is added on top.
     public bool TaxInclusive { get; set; } = true;
+
+    // true = Express Stall orders (branch.expressstall on, order type "Express Stall") get no tax at all;
+    // every other order type is taxed as before. Off by default.
+    public bool ExpressStallNoTax { get; set; } = false;
 }
 
 public class BillCalcResult
@@ -61,6 +65,9 @@ public class BillCalculator
     {
         // Same lists the order screen loaded (Tax / Discounts / Extracharge APIs: the branch's rows, by id).
         var taxes = await _context.Taxes.AsNoTracking().Where(t => t.Branchid == branchId).OrderBy(t => t.Taxid).ToListAsync();
+        // BillingSettings:ExpressStallNoTax: Express Stall orders are not taxed (the maths is otherwise unchanged).
+        if (Settings.ExpressStallNoTax && orderTypeId is int typeId && await IsExpressStallTypeAsync(typeId))
+            taxes = new List<Tax>();
         var extras = await _context.Extracharges.AsNoTracking().Where(e => e.Branchid == branchId).OrderBy(e => e.Extrachargeid).ToListAsync();
         var discount = discountId is > 0
             ? await _context.Discounts.AsNoTracking().FirstOrDefaultAsync(d => d.Discountid == discountId && d.Branchid == branchId)
@@ -168,6 +175,13 @@ public class BillCalculator
             .OrderBy(o => o.Orderid).Select(o => new { o.Totalprice, o.Ordertypeid }).ToListAsync();
         return await CalculateAsync(branchId, orders.Select(o => (double)(o.Totalprice ?? 0m)), orders.FirstOrDefault()?.Ordertypeid,
             discountId, customDiscount);
+    }
+
+    private async Task<bool> IsExpressStallTypeAsync(int orderTypeId)
+    {
+        string? name = await _context.Ordertypes.AsNoTracking()
+            .Where(o => o.Ordertypeid == orderTypeId).Select(o => o.Ordertypename).FirstOrDefaultAsync();
+        return ExpressStall.IsOrderType(name);
     }
 
     // JavaScript null / undefined in arithmetic and comparisons counts as 0.

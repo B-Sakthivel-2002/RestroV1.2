@@ -132,7 +132,7 @@ export class ThemeSettingsComponent {
   kpi(t: ThemeDef, i: number) {
     const sets: Record<string, string[]> = {
       classic: [`linear-gradient(135deg, ${t.preview.primary}, ${t.preview.accent})`],
-      orchid: ['linear-gradient(160deg,#2e0a6b,#8b5cf6)', 'linear-gradient(150deg,#9d4edd,#c77dff)', 'linear-gradient(150deg,#8b5cf6,#b794f6)', 'linear-gradient(150deg,#b06ef3,#d8b4fe)'],
+      orchid: ['linear-gradient(160deg,#03045e,#0077b6)', 'linear-gradient(150deg,#0077b6,#00b4d8)', 'linear-gradient(150deg,#023e8a,#0096c7)', 'linear-gradient(150deg,#0096c7,#48cae4)'],
       midnight: ['#22208a', '#f0146d', '#8b2be2', '#ffad2a'],
       carbon: ['linear-gradient(135deg,#0f766e,#155e75)']
     };
