@@ -49,7 +49,7 @@ import { QueryService } from '@appservices/query.service';
             </div>
           </div>
 
-          <h3 class="pf-section">Restaurant</h3>
+          <h3 class="pf-section">SmartDine</h3>
           <div class="pf-grid">
             <div class="pf-tile">
               <span class="pf-ic t1"><i class="pi pi-shop"></i></span>

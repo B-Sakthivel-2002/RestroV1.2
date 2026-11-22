@@ -90,7 +90,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
                     <div class="kot-ls-bg1 kot-card ">
                       <div class="sb-tt kot-hd-txt">
                         <span>Captain : {{bl.waiter}}</span>
-                        <span class="sb-badge">Id : {{bl.orderid}} </span>
+                        <span class="sb-badge">Order Id : {{bl.orderid}} </span>
                       </div>
                     
                         <div class="sb-tt"> 
@@ -190,7 +190,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
      </div> 
           <!-- <ng-template #orderFloorTemplate>
         <div class="modal-header">
-          <h4 class="modal-title custom-modal-title pull-left">Order Id: {{orderLocalDetail.orderid}}  <span>Date : {{orderLocalDetail.businessdate | date :'dd-MM-yyyy'}}</span></h4>
+          <h4 class="modal-title custom-modal-title pull-left">Order Id : {{orderLocalDetail.orderid}}  <span>Date : {{orderLocalDetail.businessdate | date :'dd-MM-yyyy'}}</span></h4>
           <button type="button" class="btn-close close pull-right" aria-label="Close" (click)="orderFloorModalRef?.hide();">
             <span aria-hidden="true" class="visually-hidden">&times;</span>
           </button>

@@ -15,7 +15,7 @@ import { setTheme } from 'ngx-bootstrap/utils';
   styleUrl: './app.component.scss'
 })
 export class AppComponent {
-  title = 'Restaurant';
+  title = 'SmartDine POS';
   isLoading: boolean = true;  
   customAlertMessage:any = [];
 

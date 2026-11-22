@@ -3,6 +3,12 @@
   font-size: 12px; font-weight: 600; color: var(--app-muted);
 }
 .chips-bar { --min-height: 48px; }
+.refresh-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; margin-right: 10px;
+  border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-surface); color: var(--app-text);
+  ion-icon { font-size: 18px; }
+  &:active { transform: scale(.94); }
+}
 
 // Counts + colour hints, same swatches as the web Dine in header.
 .stats {

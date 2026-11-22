@@ -32,6 +32,9 @@ import { Subscription, debounceTime, finalize, forkJoin, merge } from 'rxjs';
                       <i class="tbl-dot" [ngClass]="'d-' + k.kind"></i>{{k.label}} <b>{{ countFor(currentFloorId, k.kind) }}</b>
                     </span>
                   }
+                  <button type="button" class="btn btn-outline-secondary tbl-refresh" title="Refresh tables" (click)="manualRefresh()">
+                    <i class="pi pi-refresh"></i> Refresh
+                  </button>
                 </li>
               </ul>
             </div>
@@ -121,6 +124,7 @@ import { Subscription, debounceTime, finalize, forkJoin, merge } from 'rxjs';
     .d-kitchen{ background:var(--rp-danger); }
     .d-bill{ background:var(--rp-success); }
     .d-merged{ background:var(--rp-danger-soft); border:2px solid var(--rp-danger); }
+    .tbl-refresh{ display:inline-flex; align-items:center; gap:6px; padding:4px 14px; font-size:12px; font-weight:600; border-radius:999px; }
     @media (max-width: 991.98px){ .tbl-legend{ width:100%; justify-content:flex-start; margin:10px 0 0; padding-left:0; } }
   `
 })
@@ -153,14 +157,20 @@ export class DineinComponent implements OnInit, OnDestroy{
   }
 
   // Tables only, in the background: the floors do not change with orders.
-  private refreshTables(){
+  private refreshTables(done?: () => void){
     this.query.getActiveTables().subscribe({
       next:(res:any)=>{
         this.tablesSource = res?.data || [];
         this.query.dineinSnapshot = { floors: this.floorSource, tables: this.tablesSource };
+        done?.();
       },
-      error:()=>{}
+      error:()=> done?.()
     });
+  }
+
+  // Refresh button in the header: reloads the tables now (no full-screen loader).
+  manualRefresh(){
+    this.refreshTables();
   }
 
   // Floors and tables are drawn together. Coming back to this screen shows the last data at once and

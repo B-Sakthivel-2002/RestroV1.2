@@ -95,6 +95,13 @@ export class DineinPage {
     });
   }
 
+  // Refresh button in the top bar (same as pull-to-refresh).
+  reload(): void {
+    this.ui.tap();
+    this.query.clearCache();
+    this.load();
+  }
+
   refresh(ev: any): void {
     this.query.clearCache();
     this.load(() => ev.target.complete());

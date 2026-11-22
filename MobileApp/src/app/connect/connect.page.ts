@@ -22,7 +22,7 @@ import { QrScannerComponent } from '../core/components/qr-scanner.component';
         }
         <div class="hero">
           <div class="logo"><ion-icon name="wifi-outline"></ion-icon></div>
-          <h1>Connect to your restaurant</h1>
+          <h1>Connect to SmartDine POS</h1>
           <p>Open the web app on the billing PC, go to <b>Settings › Mobile App Connect</b> and scan the QR code.</p>
         </div>
 

@@ -9,6 +9,10 @@
         <i class="live-dot" [class.off]="liveStatus() !== 'connected'"></i>
         {{ liveStatus() === 'connected' ? 'Live' : 'Connecting' }}
       </span>
+      <!-- Manual refresh; the live auto-refresh and pull-to-refresh keep working as before -->
+      <button class="refresh-btn" (click)="reload()" aria-label="Refresh tables">
+        <ion-icon name="refresh-outline"></ion-icon>
+      </button>
     </ion-buttons>
   </ion-toolbar>
   @if (floors().length > 1) {

@@ -31,7 +31,7 @@ public class BillPrintService
 
         if (bill == null) return null;
 
-        string hotelName = _configuration["RestaurantSettings:HotelName"] ?? "RESTAURANT";
+        string hotelName = _configuration["RestaurantSettings:HotelName"] ?? "SMARTDINE POS";
         string hotelDescription = _configuration["RestaurantSettings:HotelDescription"] ?? "";
         string cashierName = await _context.Users
             .Where(u => (int?)u.Userid == bill.CreatedBy)

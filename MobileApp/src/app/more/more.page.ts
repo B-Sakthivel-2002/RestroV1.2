@@ -29,7 +29,7 @@ import { roleLabel } from '../core/constants/role-permissions';
           </div>
         </div>
 
-        <div class="section-title">Restaurant</div>
+        <div class="section-title">SmartDine</div>
         <div class="card list">
           <div class="row"><ion-icon name="storefront-outline"></ion-icon><span>Branch</span><b>{{ s()?.branchName || '—' }}</b></div>
           <div class="row"><ion-icon name="business-outline"></ion-icon><span>Outlet</span><b>{{ s()?.outletName || '—' }}</b></div>

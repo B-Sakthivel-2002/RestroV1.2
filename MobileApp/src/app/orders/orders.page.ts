@@ -48,7 +48,7 @@ type Status = 'all' | 'submitted' | 'printed' | 'approved' | 'cancelled';
             <div class="card ord">
               <button class="ord-head" (click)="toggle(o.orderid)">
                 <div class="l">
-                  <div class="no">#{{ o.ordernumber || o.orderid }}</div>
+                  <div class="no">{{ o.ordernumber || o.orderid }}</div>
                   <div class="meta">{{ o.ordertype || 'Order' }} · {{ o.timedate | date:'h:mm a' }} · {{ o.orderdetail?.length || 0 }} item{{ o.orderdetail?.length === 1 ? '' : 's' }}</div>
                 </div>
                 <div class="r">
